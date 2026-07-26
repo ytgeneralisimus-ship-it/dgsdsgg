@@ -853,7 +853,7 @@ example:AddToggle("AutoFarm [laps|checkpoints]", function(state)
     end
 end)
 
--- ======================== ОКНО 4: Misc (Spins, Crates, Season) ========================
+-- ======================== ОКНО 4: Misc (Spins, Crates, Season, Дополнительно) ========================
 local example = library:CreateWindow({ text = "Misc" })
 
 example:AddButton("Force Load Map", function()
@@ -894,7 +894,7 @@ example:AddDropdown(races(), function(state)
     end
 end)
 
--- Авто-спин Standard (безопасный вызов)
+-- ---- Авто-спины (отдельные) ----
 example:AddToggle("Auto Spin Standard", function(state)
     getfenv().spinner = (state and true or false)
     task.spawn(function()
@@ -915,7 +915,6 @@ example:AddToggle("Auto Spin Standard", function(state)
     end)
 end)
 
--- Авто-спин Hyper
 example:AddToggle("Auto Spin Hyper", function(state)
     getfenv().spinner1 = (state and true or false)
     task.spawn(function()
@@ -934,7 +933,7 @@ example:AddToggle("Auto Spin Hyper", function(state)
     end)
 end)
 
--- Стабильное открытие обычных китов
+-- ---- Авто-открытие китов (отдельные) ----
 example:AddToggle("Auto Open Custom Crate", function(state)
     getfenv().deluxe1 = (state and true or false)
     task.spawn(function()
@@ -947,7 +946,6 @@ example:AddToggle("Auto Open Custom Crate", function(state)
     end)
 end)
 
--- Стабильное открытие Deluxe китов
 example:AddToggle("Auto Open Delux Custom Crate", function(state)
     getfenv().deluxe = (state and true or false)
     task.spawn(function()
@@ -960,43 +958,154 @@ example:AddToggle("Auto Open Delux Custom Crate", function(state)
     end)
 end)
 
--- Авто-сбор наград с бесплатной ветки БП (уровни 1-50)
-example:AddToggle("Auto Claim Free Season Rewards", function(state)
-    getfenv().seasonClaimFree = (state and true or false)
-    while getfenv().seasonClaimFree do
-        local claimFunc = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes")
-            and game:GetService("ReplicatedStorage").Remotes:FindFirstChild("Services")
-            and game:GetService("ReplicatedStorage").Remotes.Services:FindFirstChild("TrophySeasonRemotes")
-            and game:GetService("ReplicatedStorage").Remotes.Services.TrophySeasonRemotes:FindFirstChild("ClaimLevelReward")
-        if claimFunc and claimFunc:IsA("RemoteFunction") then
-            for level = 1, 50 do
-                pcall(function()
-                    claimFunc:InvokeServer(level, "Free")
-                end)
-                task.wait(0.1)
-            end
+-- ---- НОВЫЕ ФУНКЦИИ (из других скриптов) ----
+
+-- 1. Авто-сбор бесплатных подарков в магазине
+example:AddToggle("Auto Claim Free Gifts (Store)", function(state)
+    getfenv().claimFreeGift = (state and true or false)
+    task.spawn(function()
+        while getfenv().claimFreeGift do
+            pcall(function()
+                local claimRemote = game:GetService("ReplicatedStorage"):FindFirstChild("Databases") 
+                    and game.ReplicatedStorage.Databases:FindFirstChild("Store") 
+                    and game.ReplicatedStorage.Databases.Store:FindFirstChild("Featured") 
+                    and game.ReplicatedStorage.Databases.Store.Featured:FindFirstChild("ClaimFreeGift")
+                if claimRemote then
+                    claimRemote:InvokeServer()
+                end
+            end)
+            task.wait(5)
         end
-        task.wait(10)
-    end
+    end)
 end)
 
--- Авто-сбор наград с премиум-ветки БП
-example:AddToggle("Auto Claim Premium Season Rewards", function(state)
-    getfenv().seasonClaimPremium = (state and true or false)
-    while getfenv().seasonClaimPremium do
-        local claimFunc = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes")
-            and game:GetService("ReplicatedStorage").Remotes:FindFirstChild("Services")
-            and game:GetService("ReplicatedStorage").Remotes.Services:FindFirstChild("TrophySeasonRemotes")
-            and game:GetService("ReplicatedStorage").Remotes.Services.TrophySeasonRemotes:FindFirstChild("ClaimLevelReward")
-        if claimFunc and claimFunc:IsA("RemoteFunction") then
-            for level = 1, 50 do
-                pcall(function()
-                    claimFunc:InvokeServer(level, "Premium")
-                end)
-                task.wait(0.1)
-            end
+-- 2. Улучшенный сбор наград сезона (Free, Premium, Elite)
+example:AddToggle("Auto Claim ALL Season Rewards", function(state)
+    getfenv().claimSeasonAll = (state and true or false)
+    task.spawn(function()
+        while getfenv().claimSeasonAll do
+            pcall(function()
+                local rep = game:GetService("ReplicatedStorage")
+                local remotes = rep:FindFirstChild("Remotes")
+                local services = remotes and remotes:FindFirstChild("Services")
+                
+                local seasonService = (services and (services:FindFirstChild("TrophySeasonRemotes") or services:FindFirstChild("SeasonService") or services:FindFirstChild("BattlePassService"))) 
+                    or (remotes and (remotes:FindFirstChild("TrophySeasonRemotes") or remotes:FindFirstChild("SeasonService")))
+                
+                if seasonService then
+                    local claimRemote = seasonService:FindFirstChild("ClaimLevelReward") or seasonService:FindFirstChild("ClaimReward") or seasonService:FindFirstChild("Claim")
+                    if claimRemote then
+                        for level = 1, 50 do
+                            if not getfenv().claimSeasonAll do break end
+                            if claimRemote:IsA("RemoteFunction") then
+                                claimRemote:InvokeServer(level, "Free")
+                                claimRemote:InvokeServer(level, "Premium")
+                                claimRemote:InvokeServer(level, "Elite")
+                                claimRemote:InvokeServer(level) -- иногда без второго аргумента
+                            elseif claimRemote:IsA("RemoteEvent") then
+                                claimRemote:FireServer(level, "Free")
+                                claimRemote:FireServer(level, "Premium")
+                                claimRemote:FireServer(level, "Elite")
+                                claimRemote:FireServer(level)
+                            end
+                            task.wait(0.05)
+                        end
+                    end
+                end
+            end)
+            task.wait(5)
         end
-        task.wait(10)
+    end)
+end)
+
+-- 3. Открытие всех видов китов (перебор названий)
+example:AddToggle("Auto Open All Customization Kits", function(state)
+    getfenv().openAllKits = (state and true or false)
+    task.spawn(function()
+        while getfenv().openAllKits do
+            pcall(function()
+                local consume = game:GetService("ReplicatedStorage").Remotes.Services.ConsumableServiceRemotes.Consume
+                local kitTypes = {
+                    "DecorationKit", 
+                    "DecorationKitDeluxe", 
+                    "RegularCustomizationKit", 
+                    "DeluxeCustomizationKit",
+                    "CustomizationKit"
+                }
+                for _, kitName in ipairs(kitTypes) do
+                    if not getfenv().openAllKits do break end
+                    consume:InvokeServer(kitName)
+                    task.wait(0.1)
+                end
+            end)
+            task.wait(0.5)
+        end
+    end)
+end)
+
+-- 4. Комбинированный цикл (сезон + киты + спины)
+example:AddToggle("Auto Loop All (Season + Kits + Spins)", function(state)
+    getfenv().autoLoopAll = (state and true or false)
+    task.spawn(function()
+        while getfenv().autoLoopAll do
+            pcall(function()
+                local remotes = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes")
+                local services = remotes and remotes:FindFirstChild("Services")
+                
+                -- 1. Сбор наград сезона (Free + Premium)
+                local claimFunc = services and services:FindFirstChild("TrophySeasonRemotes") and services.TrophySeasonRemotes:FindFirstChild("ClaimLevelReward")
+                if claimFunc then
+                    for level = 1, 50 do
+                        if not getfenv().autoLoopAll then break end
+                        claimFunc:InvokeServer(level, "Free")
+                        claimFunc:InvokeServer(level, "Premium")
+                        task.wait(0.05)
+                    end
+                end
+
+                -- 2. Открытие всех видов китов
+                local consumeRemote = services and services:FindFirstChild("ConsumableServiceRemotes") and services.ConsumableServiceRemotes:FindFirstChild("Consume")
+                if consumeRemote then
+                    local kitTypes = {"DecorationKit", "DecorationKitDeluxe", "RegularCustomizationKit", "DeluxeCustomizationKit", "CustomizationKit"}
+                    for _, kit in ipairs(kitTypes) do
+                        if not getfenv().autoLoopAll then break end
+                        consumeRemote:InvokeServer(kit)
+                        task.wait(0.1)
+                    end
+                end
+
+                -- 3. Прокрутка спинов (Standard + Hyper)
+                local spinRemote = game:GetService("ReplicatedStorage"):FindFirstChild("Databases") 
+                    and game.ReplicatedStorage.Databases:FindFirstChild("Spinners") 
+                    and game.ReplicatedStorage.Databases.Spinners:FindFirstChild("SpinEvent")
+                
+                if spinRemote then
+                    spinRemote:InvokeServer("Standard", "Free")
+                    spinRemote:InvokeServer("Hyper", "Free")
+                else
+                    local altSpin = services and services:FindFirstChild("SpinnerRemotes") and services.SpinnerRemotes:FindFirstChild("Spin")
+                    if altSpin then
+                        altSpin:InvokeServer("Standard")
+                        altSpin:InvokeServer("Hyper")
+                    end
+                end
+            end)
+            task.wait(3)
+        end
+    end)
+end)
+
+-- 5. Авто-сбор токенов (упрощённый вариант)
+example:AddToggle("Auto Claim Tokens", function(state)
+    getfenv().claimTokens = (state and true or false)
+    while getfenv().claimTokens do
+        pcall(function()
+            local claimRemote = game:GetService("ReplicatedStorage").Remotes.Services.TrophySeasonRemotes.ClaimLevelReward
+            for lvl = 1, 50 do
+                claimRemote:InvokeServer(lvl, "Free")
+            end
+        end)
+        task.wait(5)
     end
 end)
 
