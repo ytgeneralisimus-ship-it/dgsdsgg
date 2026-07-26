@@ -894,33 +894,73 @@ example:AddDropdown(races(), function(state)
     end
 end)
 
--- Авто-спин Standard
+-- Авто-спин Standard (безопасный вызов)
 example:AddToggle("Auto Spin Standard", function(state)
     getfenv().spinner = (state and true or false)
-    while getfenv().spinner do
-        task.spawn(function()
+    task.spawn(function()
+        while getfenv().spinner do
             pcall(function()
-                game:GetService("ReplicatedStorage").Databases.Spinners.SpinEvent:InvokeServer("Standard", "Free")
+                local spinRemote = game:GetService("ReplicatedStorage"):FindFirstChild("Databases") 
+                    and game:GetService("ReplicatedStorage").Databases:FindFirstChild("Spinners") 
+                    and game:GetService("ReplicatedStorage").Databases.Spinners:FindFirstChild("SpinEvent")
+                
+                if spinRemote then
+                    spinRemote:InvokeServer("Standard", "Free")
+                else
+                    game:GetService("ReplicatedStorage").Remotes.Services.SpinnerRemotes.Spin:InvokeServer("Standard")
+                end
             end)
-        end)
-        task.wait(0.5)
-    end
+            task.wait(1.5)
+        end
+    end)
 end)
 
 -- Авто-спин Hyper
 example:AddToggle("Auto Spin Hyper", function(state)
     getfenv().spinner1 = (state and true or false)
-    while getfenv().spinner1 do
-        task.spawn(function()
+    task.spawn(function()
+        while getfenv().spinner1 do
             pcall(function()
-                game:GetService("ReplicatedStorage").Databases.Spinners.SpinEvent:InvokeServer("Hyper", "Free")
+                local spinRemote = game:GetService("ReplicatedStorage"):FindFirstChild("Databases") 
+                    and game:GetService("ReplicatedStorage").Databases:FindFirstChild("Spinners") 
+                    and game:GetService("ReplicatedStorage").Databases.Spinners:FindFirstChild("SpinEvent")
+                
+                if spinRemote then
+                    spinRemote:InvokeServer("Hyper", "Free")
+                end
             end)
-        end)
-        task.wait(0.5)
-    end
+            task.wait(1.5)
+        end
+    end)
 end)
 
--- Авто-сбор токенов и наград с бесплатной ветки БП (уровни 1-50)
+-- Стабильное открытие обычных китов
+example:AddToggle("Auto Open Custom Crate", function(state)
+    getfenv().deluxe1 = (state and true or false)
+    task.spawn(function()
+        while getfenv().deluxe1 do
+            pcall(function()
+                game:GetService("ReplicatedStorage").Remotes.Services.ConsumableServiceRemotes.Consume:InvokeServer("DecorationKit")
+            end)
+            task.wait(1.0)
+        end
+    end)
+end)
+
+-- Стабильное открытие Deluxe китов
+example:AddToggle("Auto Open Delux Custom Crate", function(state)
+    getfenv().deluxe = (state and true or false)
+    task.spawn(function()
+        while getfenv().deluxe do
+            pcall(function()
+                game:GetService("ReplicatedStorage").Remotes.Services.ConsumableServiceRemotes.Consume:InvokeServer("DecorationKitDeluxe")
+            end)
+            task.wait(1.0)
+        end
+    end)
+end)
+
+-- Авто-сбор наград с бесплатной ветки БП (уровни 1-50)
 example:AddToggle("Auto Claim Free Season Rewards", function(state)
     getfenv().seasonClaimFree = (state and true or false)
     while getfenv().seasonClaimFree do
@@ -960,28 +1000,6 @@ example:AddToggle("Auto Claim Premium Season Rewards", function(state)
     end
 end)
 
--- Авто-распаковка Deluxe-китов (удаляет их из инвентаря сразу после спинов)
-example:AddToggle("Auto Open Delux Custom Crate", function(state)
-    getfenv().deluxe = (state and true or false)
-    while getfenv().deluxe do
-        pcall(function()
-            game:GetService("ReplicatedStorage").Remotes.Services.ConsumableServiceRemotes.Consume:InvokeServer("DecorationKitDeluxe")
-        end)
-        task.wait(0.1)
-    end
-end)
-
--- Авто-распаковка обычных китов
-example:AddToggle("Auto Open Custom Crate", function(state)
-    getfenv().deluxe1 = (state and true or false)
-    while getfenv().deluxe1 do
-        pcall(function()
-            game:GetService("ReplicatedStorage").Remotes.Services.ConsumableServiceRemotes.Consume:InvokeServer("DecorationKit")
-        end)
-        task.wait(0.1)
-    end
-end)
-
 -- ======================== ЗАГРУЗКА СОХРАНЁННЫХ НАСТРОЕК ========================
 if pcall(function() return readfile("cdtdelivery.txt") end) and readfile("cdtdelivery.txt") ~= nil then
     local data = readfile("cdtdelivery.txt"):split(" ")
@@ -995,4 +1013,4 @@ if pcall(function() return readfile("cdtdelivery.txt") end) and readfile("cdtdel
     end
 end
 
-print("✅ Все скрипты успешно оптимизированы!")
+print("✅ Обновлённый скрипт успешно загружен!")
