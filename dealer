@@ -896,7 +896,7 @@ end)
 
 example:AddLabel("--- Авто-Сбор Sports Season ---", function() end)
 
--- Полный забор ВСЕХ наград (Free + Elite/Premium) для Sports Season
+-- Автоматический сбор ВСЕХ наград сезонов (Free, Premium, Elite)
 example:AddToggle("Auto Claim ALL Season Rewards", function(state)
     getfenv().claimSeason = (state and true or false)
     
@@ -905,51 +905,49 @@ example:AddToggle("Auto Claim ALL Season Rewards", function(state)
             pcall(function()
                 local rep = game:GetService("ReplicatedStorage")
                 local remotes = rep:FindFirstChild("Remotes")
+                local services = remotes and remotes:FindFirstChild("Services")
                 
-                -- Поиск службы сезонов/БП
-                local seasonRemotes = remotes and (remotes:FindFirstChild("Services") or remotes)
-                local trophyService = seasonRemotes and (seasonRemotes:FindFirstChild("TrophySeasonRemotes") or seasonRemotes:FindFirstChild("SeasonService") or seasonRemotes:FindFirstChild("BattlePassService"))
+                -- Поиск нужного сервиса наград
+                local targetService = services and (services:FindFirstChild("TrophySeasonRemotes") or services:FindFirstChild("SeasonService") or services:FindFirstChild("BattlePassService"))
+                if not targetService and remotes then
+                    targetService = remotes:FindFirstChild("TrophySeasonRemotes") or remotes:FindFirstChild("SeasonService")
+                end
                 
-                if trophyService then
-                    local claimRemote = trophyService:FindFirstChild("ClaimLevelReward") or trophyService:FindFirstChild("ClaimReward") or trophyService:FindFirstChild("Claim")
+                if targetService then
+                    local claimRemote = targetService:FindFirstChild("ClaimLevelReward") or targetService:FindFirstChild("ClaimReward") or targetService:FindFirstChild("Claim")
                     
                     if claimRemote then
                         for level = 1, 50 do
-                            if not getfenv().claimSeason do break end
+                            if not getfenv().claimSeason then break end
                             
-                            -- Пробуем разные форматы передачи аргументов, используемые разработчиками
                             if claimRemote:IsA("RemoteFunction") then
                                 claimRemote:InvokeServer(level, "Free")
                                 claimRemote:InvokeServer(level, "Premium")
                                 claimRemote:InvokeServer(level, "Elite")
-                                claimRemote:InvokeServer(level)
                             elseif claimRemote:IsA("RemoteEvent") then
                                 claimRemote:FireServer(level, "Free")
                                 claimRemote:FireServer(level, "Premium")
                                 claimRemote:FireServer(level, "Elite")
-                                claimRemote:FireServer(level)
                             end
                             task.wait(0.05)
                         end
                     end
                 end
             end)
-            task.wait(5) -- Проверка каждые 5 секунд
+            task.wait(5)
         end
     end)
 end)
 
 example:AddLabel("--- Использование Спинов и Китов ---", function() end)
 
--- Авто-открытие всех видов китов (обычные, Deluxe, Sports)
+-- Авто-открытие всех видов китов
 example:AddToggle("Auto Open All Customization Kits", function(state)
     getfenv().openAllKits = (state and true or false)
     task.spawn(function()
         while getfenv().openAllKits do
             pcall(function()
                 local consume = game:GetService("ReplicatedStorage").Remotes.Services.ConsumableServiceRemotes.Consume
-                
-                -- Перебираем все возможные имена китов из сезонов
                 local kitTypes = {
                     "DecorationKit", 
                     "DecorationKitDeluxe", 
@@ -959,7 +957,7 @@ example:AddToggle("Auto Open All Customization Kits", function(state)
                 }
                 
                 for _, kitName in ipairs(kitTypes) do
-                    if not getfenv().openAllKits do break end
+                    if not getfenv().openAllKits then break end
                     consume:InvokeServer(kitName)
                     task.wait(0.1)
                 end
@@ -969,15 +967,13 @@ example:AddToggle("Auto Open All Customization Kits", function(state)
     end)
 end)
 
--- Авто-прокрутка всех полученных спинов (Standard + Hyper)
+-- Авто-крутка всех типов спинов
 example:AddToggle("Auto Spin (Standard & Hyper)", function(state)
     getfenv().autoSpinAll = (state and true or false)
     task.spawn(function()
         while getfenv().autoSpinAll do
             pcall(function()
                 local rep = game:GetService("ReplicatedStorage")
-                
-                -- Основной способ вызова спиннера
                 local spinRemote = rep:FindFirstChild("Databases") 
                     and rep.Databases:FindFirstChild("Spinners") 
                     and rep.Databases.Spinners:FindFirstChild("SpinEvent")
@@ -985,11 +981,10 @@ example:AddToggle("Auto Spin (Standard & Hyper)", function(state)
                 if spinRemote then
                     spinRemote:InvokeServer("Standard", "Free")
                     spinRemote:InvokeServer("Hyper", "Free")
-                    spinRemote:InvokeServer("Standard")
-                    spinRemote:InvokeServer("Hyper")
                 else
-                    -- Запасной способ через Services
-                    local altSpin = rep.Remotes.Services:FindFirstChild("SpinnerRemotes") 
+                    local altSpin = rep:FindFirstChild("Remotes") 
+                        and rep.Remotes:FindFirstChild("Services") 
+                        and rep.Remotes.Services:FindFirstChild("SpinnerRemotes") 
                         and rep.Remotes.Services.SpinnerRemotes:FindFirstChild("Spin")
                     if altSpin then
                         altSpin:InvokeServer("Standard")
