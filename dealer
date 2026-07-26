@@ -1,8 +1,9 @@
 -- ============================================================
 --           ОБЪЕДИНЁННЫЙ СКРИПТ (ФИНАЛЬНЫЙ)
---   Все функции из предоставленных файлов, без дублей
+--   Все функции + быстрый авто-рейс + исправленные спины/киты
 -- ============================================================
 
+-- Функция получения списка гонок
 local function races()
     local tab = {"None"}
     for i,v in pairs(workspace.Races:GetChildren()) do
@@ -21,7 +22,7 @@ game:GetService("Players").LocalPlayer.Idled:connect(function()
    vu:Button2Up(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
 end)
 
--- Перехват методов
+-- Перехват методов (для доставки, голосования, гонок)
 local mt = getrawmetatable(game)
 setreadonly(mt, false)
 local namecall = mt.__namecall
@@ -534,14 +535,15 @@ win2:AddToggle("Auto Delivery (продвинутая)", function(state)
     end
 end)
 
--- ======================== ОКНО 3: Race (ПОЛНЫЙ КОД ИЗ ДРУГОГО ФАЙЛА) ========================
+-- ======================== ОКНО 3: Race ========================
 local win3 = library:CreateWindow({ text = "Race" })
 
 win3:AddBox("Enter Auto Race Speed", function(object, focus)
     if focus then getfenv().speed = tonumber(object.Text) end
 end)
 
-win3:AddToggle("Auto Race", function(state)
+-- Стандартный авто-рейс (оригинальная логика)
+win3:AddToggle("Auto Race (Standard)", function(state)
     _G.racetest = state
     workspace.Gravity = 196
     local race = nil
@@ -755,6 +757,94 @@ win3:AddToggle("Auto Race", function(state)
     end
 end)
 
+-- ===== БЫСТРЫЙ АВТО-РЕЙС (ХИТБОКС) =====
+win3:AddToggle("Auto Race (Fast - Hitbox)", function(state)
+    _G.racetest_fast = state
+    workspace.Gravity = 196
+    local race = nil
+    local distance = math.huge
+    for i,v in pairs(workspace.Races:GetDescendants()) do
+        if v.Name == "Main" and v.ClassName == "UnionOperation" then
+            local Dist = (game.Players.LocalPlayer.Character.HumanoidRootPart.Position - v.Position).magnitude
+            if Dist < distance then
+                distance = Dist
+                race = v
+            end
+        end
+    end
+    local tpto = race and race.CFrame or CFrame.new()
+    _G.remotetable1 = nil
+    _G.remotetable2 = nil
+    _G.remotetable3 = nil
+    while _G.racetest_fast do
+        wait()
+        if game:GetService("Players").LocalPlayer.PlayerGui.Menu.Race.Visible == false and _G.remotetable1 ~= nil then
+            getfenv().firsttime_fast = true
+            local chr = game.Players.LocalPlayer.Character
+            if chr and chr:FindFirstChild("Humanoid") and chr.Humanoid.SeatPart then
+                local car = chr.Humanoid.SeatPart.Parent.Parent
+                car:PivotTo(tpto)
+                workspace.Gravity = 196
+                chr.Head.Anchored = true
+                wait(1)
+                chr.Head.Anchored = false
+                local timer = tick()
+                repeat task.wait(0.1)
+                    _G.remote1:FireServer(unpack(_G.remotetable1))
+                until tick()-timer > 15 or not _G.racetest_fast
+                if _G.remotetable2 ~= nil then
+                    _G.remote2:FireServer(unpack(_G.remotetable2))
+                    task.wait(15)
+                end
+                if _G.remotetable3 ~= nil then _G.remote3:FireServer(unpack(_G.remotetable3)) end
+                repeat wait() until game:GetService("Players").LocalPlayer.PlayerGui.Menu.Race.Visible == true or not _G.racetest_fast
+            end
+        elseif game:GetService("Players").LocalPlayer.PlayerGui.Menu.Race.Visible == true then
+            repeat task.wait() until game:GetService("Players").LocalPlayer.PlayerGui.RaceStart.GO.ImageTransparency ~= 1 or getfenv().firsttime_fast == false or not _G.racetest_fast
+            getfenv().firsttime_fast = false
+            -- Быстрый проход: телепорт машины к каждому чекпоинту с высокой скоростью
+            local speed = getfenv().speed or 200
+            local TweenService = game:GetService("TweenService")
+            while _G.racetest_fast do
+                local checkpoint = nil
+                for i,v in pairs(workspace.Races:GetDescendants()) do
+                    if v.Name == "Checkpoint" and v.ClassName == "MeshPart" and v.Transparency ~= 1 then
+                        checkpoint = v
+                        break
+                    end
+                end
+                if not checkpoint then break end
+                local chr = game.Players.LocalPlayer.Character
+                if not chr or not chr:FindFirstChild("Humanoid") then break end
+                local car = chr.Humanoid.SeatPart and chr.Humanoid.SeatPart.Parent.Parent
+                if not car then break end
+                local dist = (chr.HumanoidRootPart.Position - checkpoint.Position).Magnitude
+                local goal = checkpoint.CFrame + Vector3.new(0,5,0)
+                -- Используем очень короткое время для мгновенного перемещения
+                local TweenInfoToUse = TweenInfo.new(0.1, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut, 0, false, 0)
+                local TweenValue = Instance.new("CFrameValue")
+                TweenValue.Value = car:GetPrimaryPartCFrame()
+                TweenValue.Changed:Connect(function()
+                    car:PivotTo(CFrame.new(TweenValue.Value.Position))
+                end)
+                local OnTween = TweenService:Create(TweenValue, TweenInfoToUse, {Value = goal})
+                OnTween:Play()
+                OnTween.Completed:Wait()
+                TweenValue:Destroy()
+                -- Проверка на последний чекпоинт – завершаем
+                if checkpoint.Parent and checkpoint.Parent.Parent then
+                    local children = checkpoint.Parent.Parent:GetChildren()
+                    local last = children[#children]
+                    if last and last == checkpoint.Parent then
+                        break
+                    end
+                end
+                wait(0.05)
+            end
+        end
+    end
+end)
+
 win3:AddToggle("Auto Drift Race", function(state)
     _G.racetest3 = state
     if _G.racetest3 == false and partvelo ~= nil then
@@ -924,7 +1014,7 @@ win4:AddDropdown(races(), function(state)
     end
 end)
 
--- ---- Авто-спины ----
+-- ---- Авто-спины (исправленные) ----
 win4:AddToggle("Auto Spin Standard", function(state)
     getfenv().spinner = state
     task.spawn(function()
@@ -936,7 +1026,14 @@ win4:AddToggle("Auto Spin Standard", function(state)
                 if spinRemote then
                     spinRemote:InvokeServer("Standard", "Free")
                 else
-                    game:GetService("ReplicatedStorage").Remotes.Services.SpinnerRemotes.Spin:InvokeServer("Standard")
+                    -- fallback
+                    local altSpin = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes")
+                        and game.ReplicatedStorage.Remotes:FindFirstChild("Services")
+                        and game.ReplicatedStorage.Remotes.Services:FindFirstChild("SpinnerRemotes")
+                        and game.ReplicatedStorage.Remotes.Services.SpinnerRemotes:FindFirstChild("Spin")
+                    if altSpin then
+                        altSpin:InvokeServer("Standard")
+                    end
                 end
             end)
             task.wait(1.5)
@@ -954,6 +1051,14 @@ win4:AddToggle("Auto Spin Hyper", function(state)
                     and game.ReplicatedStorage.Databases.Spinners:FindFirstChild("SpinEvent")
                 if spinRemote then
                     spinRemote:InvokeServer("Hyper", "Free")
+                else
+                    local altSpin = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes")
+                        and game.ReplicatedStorage.Remotes:FindFirstChild("Services")
+                        and game.ReplicatedStorage.Remotes.Services:FindFirstChild("SpinnerRemotes")
+                        and game.ReplicatedStorage.Remotes.Services.SpinnerRemotes:FindFirstChild("Spin")
+                    if altSpin then
+                        altSpin:InvokeServer("Hyper")
+                    end
                 end
             end)
             task.wait(1.5)
@@ -961,7 +1066,26 @@ win4:AddToggle("Auto Spin Hyper", function(state)
     end)
 end)
 
--- ---- Авто-открытие китов ----
+-- ---- Авто-открытие всех китов (с перебором) ----
+win4:AddToggle("Auto Open All Customization Kits", function(state)
+    getfenv().openAllKits = state
+    task.spawn(function()
+        while getfenv().openAllKits do
+            pcall(function()
+                local consume = game:GetService("ReplicatedStorage").Remotes.Services.ConsumableServiceRemotes.Consume
+                local kitTypes = {"DecorationKit", "DecorationKitDeluxe", "RegularCustomizationKit", "DeluxeCustomizationKit", "CustomizationKit"}
+                for _, kitName in ipairs(kitTypes) do
+                    if not getfenv().openAllKits then break end
+                    consume:InvokeServer(kitName)
+                    task.wait(0.1)
+                end
+            end)
+            task.wait(0.5)
+        end
+    end)
+end)
+
+-- ---- Отдельные тогглы для китов (если нужны) ----
 win4:AddToggle("Auto Open Custom Crate", function(state)
     getfenv().deluxe1 = state
     task.spawn(function()
@@ -986,7 +1110,7 @@ win4:AddToggle("Auto Open Delux Custom Crate", function(state)
     end)
 end)
 
--- ---- Дополнительные функции ----
+-- ---- Авто-забор подарков из магазина (каждые 2 секунды) ----
 win4:AddToggle("Auto Claim Free Gifts (Store)", function(state)
     getfenv().claimFreeGift = state
     task.spawn(function()
@@ -1000,11 +1124,12 @@ win4:AddToggle("Auto Claim Free Gifts (Store)", function(state)
                     claimRemote:InvokeServer()
                 end
             end)
-            task.wait(5)
+            task.wait(2) -- каждые 2 секунды
         end
     end)
 end)
 
+-- ---- Авто-забор всех сезонных наград ----
 win4:AddToggle("Auto Claim ALL Season Rewards", function(state)
     getfenv().claimSeasonAll = state
     task.spawn(function()
@@ -1041,24 +1166,52 @@ win4:AddToggle("Auto Claim ALL Season Rewards", function(state)
     end)
 end)
 
-win4:AddToggle("Auto Open All Customization Kits", function(state)
-    getfenv().openAllKits = state
+-- ---- Авто-забор Daily Streak ----
+win4:AddToggle("Auto Claim Daily Streak", function(state)
+    getfenv().autoDaily = state
     task.spawn(function()
-        while getfenv().openAllKits do
+        while getfenv().autoDaily do
             pcall(function()
-                local consume = game:GetService("ReplicatedStorage").Remotes.Services.ConsumableServiceRemotes.Consume
-                local kitTypes = {"DecorationKit", "DecorationKitDeluxe", "RegularCustomizationKit", "DeluxeCustomizationKit", "CustomizationKit"}
-                for _, kitName in ipairs(kitTypes) do
-                    if not getfenv().openAllKits then break end
-                    consume:InvokeServer(kitName)
-                    task.wait(0.1)
+                local dailyEvent = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes")
+                    and game.ReplicatedStorage.Remotes:FindFirstChild("EventController")
+                    and game.ReplicatedStorage.Remotes.EventController:FindFirstChild("DailyStreak")
+                if dailyEvent and dailyEvent:IsA("RemoteEvent") then
+                    -- Пытаемся забрать награду
+                    firesignal(dailyEvent.OnClientEvent, {Action = "Claim"})
+                    local claimFunc = dailyEvent:FindFirstChild("Claim")
+                    if claimFunc and claimFunc:IsA("RemoteFunction") then
+                        claimFunc:InvokeServer()
+                    end
+                else
+                    local claimRemote = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes")
+                        and game.ReplicatedStorage.Remotes:FindFirstChild("DailyStreak")
+                    if claimRemote and claimRemote:IsA("RemoteFunction") then
+                        claimRemote:InvokeServer()
+                    end
                 end
             end)
-            task.wait(0.5)
+            task.wait(10)
         end
     end)
 end)
 
+-- ---- Авто-использование Deluxe Upgrade Kit ----
+win4:AddToggle("Auto Use Deluxe Upgrade Kit", function(state)
+    getfenv().autoUpgradeKit = state
+    task.spawn(function()
+        while getfenv().autoUpgradeKit do
+            pcall(function()
+                local consume = game:GetService("ReplicatedStorage").Remotes.Services.ConsumableServiceRemotes.Consume
+                if consume then
+                    consume:InvokeServer("DeluxeUpgradeKit")
+                end
+            end)
+            task.wait(2)
+        end
+    end)
+end)
+
+-- ---- Комбинированный цикл (всё в одном) ----
 win4:AddToggle("Auto Loop All (Season + Kits + Spins)", function(state)
     getfenv().autoLoopAll = state
     task.spawn(function()
@@ -1106,27 +1259,12 @@ win4:AddToggle("Auto Loop All (Season + Kits + Spins)", function(state)
     end)
 end)
 
-win4:AddToggle("Auto Claim Tokens", function(state)
-    getfenv().claimTokens = state
-    while getfenv().claimTokens do
-        pcall(function()
-            local claimRemote = game:GetService("ReplicatedStorage").Remotes.Services.TrophySeasonRemotes.ClaimLevelReward
-            for lvl = 1, 50 do
-                claimRemote:InvokeServer(lvl, "Free")
-            end
-        end)
-        task.wait(5)
-    end
-end)
-
--- ---- НОВЫЕ ФУНКЦИИ: Auto Chop и Auto Infusion (из отдельного файла) ----
+-- ---- Auto Chop и Auto Infusion (опционально) ----
 win4:AddToggle("Auto Chop Vehicle", function(state)
     getfenv().autoChop = state
     task.spawn(function()
         while getfenv().autoChop do
             pcall(function()
-                -- Замените "Ferrari8" и "1cbe963e-482a-49e9-ae80-80c1f56920e1" на нужные вам значения
-                -- Или можно реализовать выбор из списка машин, но это уже сложнее
                 local RequestChop = game:GetService("ReplicatedStorage"):WaitForChild("Packages")
                     :WaitForChild("_Index")
                     :WaitForChild("sleitnick_typed-remote@0.2.0")
