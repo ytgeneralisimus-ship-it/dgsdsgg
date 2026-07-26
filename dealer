@@ -317,24 +317,24 @@ example:AddToggle("Annoying Popup Disabler", function(state)
 end)
 
 -- ======================== ОКНО 2: Delivery Options ========================
-local example = library:CreateWindow({ text = "Delivery Options" })
+local example_delivery = library:CreateWindow({ text = "Delivery Options" })
 
-example:AddLabel("Minimum Stars", function() end)
-starman = example:AddBox("Enter Star Amount", function(object, focus)
+example_delivery:AddLabel("Minimum Stars", function() end)
+starman = example_delivery:AddBox("Enter Star Amount", function(object, focus)
     if focus then getfenv().stars = tonumber(object.Text) end
 end)
 
-example:AddLabel("Minimum Reward Money", function() end)
-miniman = example:AddBox("Enter Minimum Reward", function(object, focus)
+example_delivery:AddLabel("Minimum Reward Money", function() end)
+miniman = example_delivery:AddBox("Enter Minimum Reward", function(object, focus)
     if focus then getfenv().smaller = tonumber(object.Text) end
 end)
 
-example:AddLabel("Maximum Reward Money", function() end)
-maxman = example:AddBox("Enter Maximum Reward", function(object, focus)
+example_delivery:AddLabel("Maximum Reward Money", function() end)
+maxman = example_delivery:AddBox("Enter Maximum Reward", function(object, focus)
     if focus then getfenv().bigger = tonumber(object.Text) end
 end)
 
-example:AddToggle("Auto Delivery (продвинутая)", function(state)
+example_delivery:AddToggle("Auto Delivery (продвинутая)", function(state)
     getfenv().deliver2 = (state and true or false)
     local table = tostring(getfenv().stars.." "..getfenv().smaller.." "..getfenv().bigger)
     writefile("cdtdelivery.txt", table)
@@ -499,13 +499,13 @@ example:AddToggle("Auto Delivery (продвинутая)", function(state)
 end)
 
 -- ======================== ОКНО 3: Race ========================
-local example = library:CreateWindow({ text = "Race" })
+local example_race = library:CreateWindow({ text = "Race" })
 
-example:AddBox("Enter Auto Race Speed", function(object, focus)
+example_race:AddBox("Enter Auto Race Speed", function(object, focus)
     if focus then getfenv().speed = tonumber(object.Text) end
 end)
 
-example:AddToggle("Auto Race", function(state)
+example_race:AddToggle("Auto Race", function(state)
     _G.racetest = (state and true or false)
     workspace.Gravity = 196
     local race = nil
@@ -577,47 +577,257 @@ example:AddToggle("Auto Race", function(state)
     end
 end)
 
--- ======================== ОКНО 4: Auto Spin & Pass ========================
-local example2 = library:CreateWindow({ text = "Auto Spin & Pass" })
-
-local function spinWheel(spinType)
-    local spinFunc = game:GetService("ReplicatedStorage"):FindFirstChild("Databases") 
-        and game:GetService("ReplicatedStorage").Databases:FindFirstChild("Spinners") 
-        and game:GetService("ReplicatedStorage").Databases.Spinners:FindFirstChild("Spin")
-    
-    if spinFunc and spinFunc:IsA("RemoteFunction") then
-        pcall(function()
-            spinFunc:InvokeServer(spinType, "Free")
-        end)
+example_race:AddToggle("Auto Drift Race", function(state)
+    _G.racetest3 = (state and true or false)
+    if _G.racetest3 == false and partvelo ~= nil then
+        partvelo.Velocity = game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame.LookVector * 0
     end
-end
-
-local function claimSeasonRewards()
-    local claimFunc = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes") 
-        and game:GetService("ReplicatedStorage").Remotes:FindFirstChild("Services") 
-        and game:GetService("ReplicatedStorage").Remotes.Services:FindFirstChild("TrophySeasonRemotes") 
-        and game:GetService("ReplicatedStorage").Remotes.Services.TrophySeasonRemotes:FindFirstChild("ClaimLevelReward")
-
-    if claimFunc and claimFunc:IsA("RemoteFunction") then
-        for level = 1, 30 do
-            pcall(function()
-                claimFunc:InvokeServer(level, "Free")
-            end)
-            task.wait(0.1)
+    local race = nil
+    local distance = math.huge
+    for i,v in pairs(workspace.Races:GetDescendants()) do
+        if v.Name == "Main" and v.ClassName == "UnionOperation" then
+            local Dist = (game.Players.LocalPlayer.Character.HumanoidRootPart.Position - v.Position).magnitude
+            if Dist < distance then
+                distance = Dist
+                race = v
+            end
         end
     end
-end
-
-example2:AddToggle("Auto Spin & Claim Pass", function(state)
-    getfenv().autoSpinPass = (state and true or false)
-    task.spawn(function()
-        while getfenv().autoSpinPass do
-            spinWheel("Standard")
-            task.wait(1)
-            spinWheel("Hyper")
-            task.wait(1)
-            claimSeasonRewards()
-            task.wait(5)
+    local tpto = race and race.CFrame or CFrame.new()
+    _G.remotetable1 = nil
+    _G.remotetable2 = nil
+    _G.remotetable3 = nil
+    while _G.racetest3 do
+        wait()
+        if game:GetService("Players").LocalPlayer.PlayerGui.Menu.Race.Visible == false and _G.remotetable1 ~= nil then
+            getfenv().firsttime = true
+            local chr = game.Players.LocalPlayer.Character
+            local car = chr.Humanoid.SeatPart.Parent.Parent
+            car.PrimaryPart.Velocity = Vector3.new(0,0,0)
+            car.PrimaryPart.AssemblyLinearVelocity = Vector3.new(0,0,0)
+            wait()
+            car:PivotTo(tpto)
+            chr.Head.Anchored = true
+            wait(1)
+            chr.Head.Anchored = false
+            local timer = tick()
+            repeat task.wait(0.1)
+                _G.remote1:FireServer(unpack(_G.remotetable1))
+            until tick()-timer > 15 or _G.racetest == false
+            if _G.remotetable2 ~= nil then
+                _G.remote2:FireServer(unpack(_G.remotetable2))
+                task.wait(15)
+            end
+            if _G.remotetable3 ~= nil then _G.remote3:FireServer(unpack(_G.remotetable3)) end
+            partvelo = nil
+            repeat wait() until game:GetService("Players").LocalPlayer.PlayerGui.Menu.Race.Visible == true or _G.racetest3 == false
+        elseif game:GetService("Players").LocalPlayer.PlayerGui.Menu.Race.Visible == true then
+            repeat task.wait() until game:GetService("Players").LocalPlayer.PlayerGui.RaceStart.GO.ImageTransparency ~= 1 or getfenv().firsttime == false or _G.racetest3 == false
+            if partvelo == nil then
+                local chr = game.Players.LocalPlayer.Character
+                local car = chr.Humanoid.SeatPart.Parent.Parent
+                carloc = car.PrimaryPart.CFrame
+                local hum = game.Players.LocalPlayer.Character.HumanoidRootPart
+                local raycastParams = RaycastParams.new()
+                raycastParams.FilterDescendantsInstances = {hum.Parent, car, workspace.Camera}
+                raycastParams.FilterType = Enum.RaycastFilterType.Exclude
+                raycastParams.IgnoreWater = true
+                partvelo = workspace:Raycast(game.Players.LocalPlayer.Character.HumanoidRootPart.Position, Vector3.new(0, -100, 0), raycastParams).Instance
+                partvelo.Velocity = game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame.LookVector * 1000
+            end
+            local split = game:GetService("Players").LocalPlayer.PlayerGui.Menu.Race.Bar.Laps.Text:split("pts")[1]
+            local remove = string.gsub(split, ",", "")
+            local number = tonumber(remove)
+            local chr = game.Players.LocalPlayer.Character
+            local car = chr.Humanoid.SeatPart.Parent.Parent
+            repeat task.wait()
+                split = game:GetService("Players").LocalPlayer.PlayerGui.Menu.Race.Bar.Laps.Text:split("pts")[1]
+                remove = string.gsub(split, ",", "")
+                number = tonumber(remove)
+                if game:GetService("Players").LocalPlayer.PlayerGui.Menu.Race.Visible == true and number ~= nil and number <= 49999 then
+                    local chr = game.Players.LocalPlayer.Character
+                    local car = chr.Humanoid.SeatPart.Parent.Parent
+                    car:PivotTo(carloc)
+                end
+            until game:GetService("Players").LocalPlayer.PlayerGui.Menu.Race.Visible == false or _G.racetest3 == false or (number ~= nil and number >= 50000)
+            partvelo.Velocity = Vector3.new(0,0,0)
+            repeat task.wait()
+                car.PrimaryPart.Velocity = Vector3.new(0,0,0)
+                car.PrimaryPart.AssemblyLinearVelocity = Vector3.new(0,0,0)
+                car:PivotTo(tpto)
+            until game:GetService("Players").LocalPlayer.PlayerGui.Menu.Race.Visible == false or _G.racetest3 == false
+            wait(1)
         end
-    end)
+    end
 end)
+
+example_race:AddToggle("AutoFarm [laps|checkpoints]", function(state)
+    _G.racetest = (state and true or false)
+    workspace.Gravity = 196
+    local race = nil
+    local distance = math.huge
+    for i,v in pairs(workspace.Races:GetDescendants()) do
+        if v.Name == "Main" and v.ClassName == "UnionOperation" then
+            local Dist = (game.Players.LocalPlayer.Character.HumanoidRootPart.Position - v.Position).magnitude
+            if Dist < distance then
+                distance = Dist
+                race = v
+            end
+        end
+    end
+    local tpto = race and race.CFrame or CFrame.new()
+    _G.remotetable1 = nil
+    _G.remotetable2 = nil
+    _G.remotetable3 = nil
+    while _G.racetest do
+        local p,call = pcall(function()
+            wait()
+            if game:GetService("Players").LocalPlayer.PlayerGui.Menu.Race.Visible == false and _G.remotetable1 ~= nil then
+                getfenv().firsttime = true
+                local chr = game.Players.LocalPlayer.Character
+                local car = chr.Humanoid.SeatPart.Parent.Parent
+                car:PivotTo(tpto)
+                workspace.Gravity = 196
+                chr.Head.Anchored = true
+                wait(1)
+                chr.Head.Anchored = false
+                local timer = tick()
+                repeat task.wait(0.1)
+                    _G.remote1:FireServer(unpack(_G.remotetable1))
+                until tick()-timer > 15 or _G.racetest == false
+                if _G.remotetable2 ~= nil then
+                    _G.remote2:FireServer(unpack(_G.remotetable2))
+                    task.wait(15)
+                end
+                if _G.remotetable3 ~= nil then _G.remote3:FireServer(unpack(_G.remotetable3)) end
+                repeat wait() until game:GetService("Players").LocalPlayer.PlayerGui.Menu.Race.Visible == true or _G.racetest == false
+            elseif game:GetService("Players").LocalPlayer.PlayerGui.Menu.Race.Visible == true then
+                local count = #race.Parent.Checkpoints:GetChildren()
+                for i = 1, count * race.Parent.Script:FindFirstChild("Laps").Value do
+                    race.Parent.Script.Checkpoint:FireServer(i)
+                end
+            end
+        end)
+        if p == false then warn(p,call) end
+    end
+end)
+
+-- ======================== ОКНО 4: Misc ========================
+local example_spins = library:CreateWindow({ text = "Misc" })
+
+example_spins:AddButton("Force Load Map", function()
+    for i,v in pairs(workspace:GetDescendants()) do
+        if v.ClassName == "Model" then
+            spawn(function()
+                game.Players.LocalPlayer:RequestStreamAroundAsync(v.WorldPivot.Position, 1)
+            end)
+            wait()
+        end
+    end
+end)
+
+example_spins:AddLabel("Race Teleports", function() end)
+
+example_spins:AddDropdown(races(), function(state)
+    if state ~= "None" then
+        for i,v in pairs(workspace.Races:GetChildren()) do
+            if v.Name == state and v:FindFirstChildOfClass("UnionOperation") then
+                local chr = game.Players.LocalPlayer.Character
+                if chr.Humanoid.SeatPart == nil then
+                    chr.HumanoidRootPart.CFrame = v:FindFirstChildOfClass("UnionOperation").CFrame
+                else
+                    local car = chr.Humanoid.SeatPart.Parent.Parent
+                    car:PivotTo(v:FindFirstChildOfClass("UnionOperation").CFrame)
+                end
+                break
+            elseif v:IsA("Model") then
+                local chr = game.Players.LocalPlayer.Character
+                if chr.Humanoid.SeatPart == nil then
+                    chr.HumanoidRootPart.CFrame = v:GetPivot()
+                else
+                    local car = chr.Humanoid.SeatPart.Parent.Parent
+                    car:PivotTo(v:GetPivot())
+                end
+            end
+        end
+    end
+end)
+
+example_spins:AddToggle("Auto Open Delux Custom Crate", function(state)
+    getfenv().deluxe = (state and true or false)
+    workspace.Gravity = 196
+    while getfenv().deluxe do
+        local Event = game:GetService("ReplicatedStorage").Remotes.Services.ConsumableServiceRemotes.Consume
+        Event:InvokeServer("DecorationKitDeluxe")
+        task.wait()
+    end
+end)
+
+example_spins:AddToggle("Auto Open Custom Crate", function(state)
+    getfenv().deluxe1 = (state and true or false)
+    workspace.Gravity = 196
+    while getfenv().deluxe1 do
+        local Event = game:GetService("ReplicatedStorage").Remotes.Services.ConsumableServiceRemotes.Consume
+        Event:InvokeServer("DecorationKit")
+        task.wait()
+    end
+end)
+
+example_spins:AddToggle("Auto Spin Standard", function(state)
+    getfenv().spinner = (state and true or false)
+    while getfenv().spinner do
+        task.spawn(function()
+            pcall(function()
+                game:GetService("ReplicatedStorage").Databases.Spinners.SpinEvent:InvokeServer("Standard", "")
+            end)
+        end)
+        task.wait(0.5)
+    end
+end)
+
+example_spins:AddToggle("Auto Spin Hyper", function(state)
+    getfenv().spinner1 = (state and true or false)
+    while getfenv().spinner1 do
+        task.spawn(function()
+            pcall(function()
+                game:GetService("ReplicatedStorage").Databases.Spinners.SpinEvent:InvokeServer("Hyper", "Free")
+            end)
+        end)
+        task.wait(0.5)
+    end
+end)
+
+example_spins:AddToggle("Auto Claim Season Rewards", function(state)
+    getfenv().seasonClaim = (state and true or false)
+    while getfenv().seasonClaim do
+        local claimFunc = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes")
+            and game:GetService("ReplicatedStorage").Remotes:FindFirstChild("Services")
+            and game:GetService("ReplicatedStorage").Remotes.Services:FindFirstChild("TrophySeasonRemotes")
+            and game:GetService("ReplicatedStorage").Remotes.Services.TrophySeasonRemotes:FindFirstChild("ClaimLevelReward")
+        if claimFunc and claimFunc:IsA("RemoteFunction") then
+            for level = 1, 30 do
+                pcall(function()
+                    claimFunc:InvokeServer(level, "Free")
+                end)
+                task.wait(0.2)
+            end
+        end
+        task.wait(5)
+    end
+end)
+
+-- ======================== ЗАГРУЗКА СОХРАНЁННЫХ НАСТРОЕК ========================
+if pcall(function() return readfile("cdtdelivery.txt") end) and readfile("cdtdelivery.txt") ~= nil then
+    local data = readfile("cdtdelivery.txt"):split(" ")
+    if data and #data >= 3 then
+        getfenv().stars = tonumber(data[1])
+        getfenv().smaller = tonumber(data[2])
+        getfenv().bigger = tonumber(data[3])
+        
+        if starman then starman.Text = tostring(data[1]) end
+        if miniman then miniman.Text = tostring(data[2]) end
+        if maxman then maxman.Text = tostring(data[3]) end
+    end
+end
+
+print("✅ Скрипт успешно собран и запущен!")
