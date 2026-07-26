@@ -894,114 +894,110 @@ example:AddDropdown(races(), function(state)
     end
 end)
 
-example:AddLabel("--- Автоматизация наград и спинов ---", function() end)
+example:AddLabel("--- Авто-Сбор Sports Season ---", function() end)
 
--- Все-в-одному: авто-сбор наград сезона + открытие китов + прокрутка спинов
-example:AddToggle("Auto Loop All (Season + Kits + Spins)", function(state)
-    getfenv().autoLoopAll = (state and true or false)
+-- Полный забор ВСЕХ наград (Free + Elite/Premium) для Sports Season
+example:AddToggle("Auto Claim ALL Season Rewards", function(state)
+    getfenv().claimSeason = (state and true or false)
     
     task.spawn(function()
-        while getfenv().autoLoopAll do
+        while getfenv().claimSeason do
             pcall(function()
-                local remotes = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes")
-                local services = remotes and remotes:FindFirstChild("Services")
+                local rep = game:GetService("ReplicatedStorage")
+                local remotes = rep:FindFirstChild("Remotes")
                 
-                -- 1. Сбор наград BattlePass / Сезона (Free + Premium)
-                local claimFunc = services and services:FindFirstChild("TrophySeasonRemotes") and services.TrophySeasonRemotes:FindFirstChild("ClaimLevelReward")
-                if claimFunc then
-                    for level = 1, 50 do
-                        if not getfenv().autoLoopAll then break end
-                        claimFunc:InvokeServer(level, "Free")
-                        claimFunc:InvokeServer(level, "Premium")
-                        task.wait(0.05)
+                -- Поиск службы сезонов/БП
+                local seasonRemotes = remotes and (remotes:FindFirstChild("Services") or remotes)
+                local trophyService = seasonRemotes and (seasonRemotes:FindFirstChild("TrophySeasonRemotes") or seasonRemotes:FindFirstChild("SeasonService") or seasonRemotes:FindFirstChild("BattlePassService"))
+                
+                if trophyService then
+                    local claimRemote = trophyService:FindFirstChild("ClaimLevelReward") or trophyService:FindFirstChild("ClaimReward") or trophyService:FindFirstChild("Claim")
+                    
+                    if claimRemote then
+                        for level = 1, 50 do
+                            if not getfenv().claimSeason do break end
+                            
+                            -- Пробуем разные форматы передачи аргументов, используемые разработчиками
+                            if claimRemote:IsA("RemoteFunction") then
+                                claimRemote:InvokeServer(level, "Free")
+                                claimRemote:InvokeServer(level, "Premium")
+                                claimRemote:InvokeServer(level, "Elite")
+                                claimRemote:InvokeServer(level)
+                            elseif claimRemote:IsA("RemoteEvent") then
+                                claimRemote:FireServer(level, "Free")
+                                claimRemote:FireServer(level, "Premium")
+                                claimRemote:FireServer(level, "Elite")
+                                claimRemote:FireServer(level)
+                            end
+                            task.wait(0.05)
+                        end
                     end
                 end
+            end)
+            task.wait(5) -- Проверка каждые 5 секунд
+        end
+    end)
+end)
 
-                -- 2. Открытие китов (Decoration Kit & Deluxe Kit)
-                local consumeRemote = services and services:FindFirstChild("ConsumableServiceRemotes") and services.ConsumableServiceRemotes:FindFirstChild("Consume")
-                if consumeRemote then
-                    for i = 1, 5 do
-                        if not getfenv().autoLoopAll then break end
-                        consumeRemote:InvokeServer("DecorationKit")
-                        consumeRemote:InvokeServer("DecorationKitDeluxe")
-                        task.wait(0.2)
-                    end
+example:AddLabel("--- Использование Спинов и Китов ---", function() end)
+
+-- Авто-открытие всех видов китов (обычные, Deluxe, Sports)
+example:AddToggle("Auto Open All Customization Kits", function(state)
+    getfenv().openAllKits = (state and true or false)
+    task.spawn(function()
+        while getfenv().openAllKits do
+            pcall(function()
+                local consume = game:GetService("ReplicatedStorage").Remotes.Services.ConsumableServiceRemotes.Consume
+                
+                -- Перебираем все возможные имена китов из сезонов
+                local kitTypes = {
+                    "DecorationKit", 
+                    "DecorationKitDeluxe", 
+                    "RegularCustomizationKit", 
+                    "DeluxeCustomizationKit",
+                    "CustomizationKit"
+                }
+                
+                for _, kitName in ipairs(kitTypes) do
+                    if not getfenv().openAllKits do break end
+                    consume:InvokeServer(kitName)
+                    task.wait(0.1)
                 end
+            end)
+            task.wait(0.5)
+        end
+    end)
+end)
 
-                -- 3. Использование всех накопившихся спинов (Standard и Hyper)
-                local spinRemote = game:GetService("ReplicatedStorage"):FindFirstChild("Databases") 
-                    and game:GetService("ReplicatedStorage").Databases:FindFirstChild("Spinners") 
-                    and game:GetService("ReplicatedStorage").Databases.Spinners:FindFirstChild("SpinEvent")
+-- Авто-прокрутка всех полученных спинов (Standard + Hyper)
+example:AddToggle("Auto Spin (Standard & Hyper)", function(state)
+    getfenv().autoSpinAll = (state and true or false)
+    task.spawn(function()
+        while getfenv().autoSpinAll do
+            pcall(function()
+                local rep = game:GetService("ReplicatedStorage")
+                
+                -- Основной способ вызова спиннера
+                local spinRemote = rep:FindFirstChild("Databases") 
+                    and rep.Databases:FindFirstChild("Spinners") 
+                    and rep.Databases.Spinners:FindFirstChild("SpinEvent")
                 
                 if spinRemote then
-                    for i = 1, 3 do
-                        if not getfenv().autoLoopAll then break end
-                        spinRemote:InvokeServer("Standard", "Free")
-                        spinRemote:InvokeServer("Hyper", "Free")
-                        task.wait(0.3)
-                    end
+                    spinRemote:InvokeServer("Standard", "Free")
+                    spinRemote:InvokeServer("Hyper", "Free")
+                    spinRemote:InvokeServer("Standard")
+                    spinRemote:InvokeServer("Hyper")
                 else
-                    local altSpin = services and services:FindFirstChild("SpinnerRemotes") and services.SpinnerRemotes:FindFirstChild("Spin")
+                    -- Запасной способ через Services
+                    local altSpin = rep.Remotes.Services:FindFirstChild("SpinnerRemotes") 
+                        and rep.Remotes.Services.SpinnerRemotes:FindFirstChild("Spin")
                     if altSpin then
                         altSpin:InvokeServer("Standard")
                         altSpin:InvokeServer("Hyper")
                     end
                 end
             end)
-            task.wait(2) -- Пауза между циклами проверки
-        end
-    end)
-end)
-
--- Отдельные переключатели (если нужно управлять точечно):
-
-example:AddToggle("Auto Spin Standard", function(state)
-    getfenv().spinner = (state and true or false)
-    task.spawn(function()
-        while getfenv().spinner do
-            pcall(function()
-                local spinRemote = game:GetService("ReplicatedStorage"):FindFirstChild("Databases") 
-                    and game:GetService("ReplicatedStorage").Databases:FindFirstChild("Spinners") 
-                    and game:GetService("ReplicatedStorage").Databases.Spinners:FindFirstChild("SpinEvent")
-                
-                if spinRemote then
-                    spinRemote:InvokeServer("Standard", "Free")
-                else
-                    game:GetService("ReplicatedStorage").Remotes.Services.SpinnerRemotes.Spin:InvokeServer("Standard")
-                end
-            end)
-            task.wait(1.2)
-        end
-    end)
-end)
-
-example:AddToggle("Auto Spin Hyper", function(state)
-    getfenv().spinner1 = (state and true or false)
-    task.spawn(function()
-        while getfenv().spinner1 do
-            pcall(function()
-                local spinRemote = game:GetService("ReplicatedStorage"):FindFirstChild("Databases") 
-                    and game:GetService("ReplicatedStorage").Databases:FindFirstChild("Spinners") 
-                    and game:GetService("ReplicatedStorage").Databases.Spinners:FindFirstChild("SpinEvent")
-                
-                if spinRemote then
-                    spinRemote:InvokeServer("Hyper", "Free")
-                end
-            end)
-            task.wait(1.2)
-        end
-    end)
-end)
-
-example:AddToggle("Auto Open Kits (Normal & Deluxe)", function(state)
-    getfenv().openKits = (state and true or false)
-    task.spawn(function()
-        while getfenv().openKits do
-            pcall(function()
-                game:GetService("ReplicatedStorage").Remotes.Services.ConsumableServiceRemotes.Consume:InvokeServer("DecorationKit")
-                game:GetService("ReplicatedStorage").Remotes.Services.ConsumableServiceRemotes.Consume:InvokeServer("DecorationKitDeluxe")
-            end)
-            task.wait(0.8)
+            task.wait(1)
         end
     end)
 end)
