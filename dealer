@@ -1,292 +1,406 @@
 -- ============================================================
---           FULL STANDALONE SCRIPT FOR VEHICLE DEALERSHIP
+--           ОБЪЕДИНЁННЫЙ СКРИПТ ДЛЯ VEHICLE DEALERSHIP
+--   Включает все функции: фарм, доставка, гонки, спины, сезон
 -- ============================================================
 
--- Удаляем старый UI, если он был загружен
-if game:GetService("CoreGui"):FindFirstChild("CustomVDFarmUI") then
-    game:GetService("CoreGui").CustomVDFarmUI:Destroy()
+-- Функция получения списка гонок
+local function races()
+    local tab = {"None"}
+    if workspace:FindFirstChild("Races") then
+        for i,v in pairs(workspace.Races:GetChildren()) do
+            if v:IsA("Model") then
+                table.insert(tab, v.Name)
+            end
+        end
+    end
+    return tab
 end
 
 -- Анти-АФК
 local vu = game:GetService("VirtualUser")
 game:GetService("Players").LocalPlayer.Idled:Connect(function()
-    vu:Button2Down(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
+   vu:Button2Down(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
+   task.wait(1)
+   vu:Button2Up(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
+end)
+
+-- Перехват методов (для доставки, голосования, крафтов и т.д.)
+local mt = getrawmetatable(game)
+setreadonly(mt, false)
+local namecall = mt.__namecall
+
+mt.__namecall = newcclosure(function(self, ...)
+    local Method = getnamecallmethod()
+    local Args = {...}
+    if Method == 'FireServer' and self.Name == "JobRemoteHandler" and rawget(...,"Action") == "StartDeliveryJob" then
+        _G.remotetable = ...
+    elseif Method == 'FireServer' and self.Name == "StartLobby" then
+        _G.remotetable1 = Args
+        _G.remote1 = self
+    elseif Method == 'FireServer' and self.Name == "Vote" and (Args[2] == "Vote" or Args[2] == "VoteRace") then
+        _G.remotetable2 = Args
+        _G.remote2 = self
+    elseif Method == 'FireServer' and self.Name == "Vote" and string.find(tostring(Args[2]),"Vote") and Args[2] ~= "Vote" and Args[2] ~= "VoteRace" then
+        _G.remotetable3 = Args
+        _G.remote3 = self
+    elseif Method == 'Raycast' and getfenv().race or Method == 'Ray' and _G.racetest then
+        Args[2] = Vector3.new(0,-1000,0)
+    elseif Method == 'FireServer' and self.Name == "NPCHandler" and rawget(...,"Action") == "DeclineOrder" then
+        return
+    elseif Method == 'Fire' and self.Name == "FullscreenReward" and (getfenv().deluxe1 or getfenv().deluxe) then
+        return
+    end
+    return namecall(self, ...)
+end)
+
+-- Глобальные переменные для GUI
+local starman, miniman, maxman
+getfenv().grav = workspace.Gravity
+
+-- Загрузка библиотеки UI
+local library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Marco8642/science/main/ui%20libs2", true))()
+
+-- ======================== ОКНО 1: Vehicle Dealership ========================
+local example = library:CreateWindow({ text = "Vehicle Dealership" })
+
+example:AddBox("Enter Auto Drive Speed", function(object, focus)
+    if focus then getfenv().speed = tonumber(object.Text) end
+end)
+
+example:AddToggle("Auto Farm", function(state)
+    getfenv().auto = (state and true or false)
     task.wait(1)
-    vu:Button2Up(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
-end)
-
--- Глобальные флаги
-getfenv().speed = 1000
-getfenv().autoFarm = false
-getfenv().autoKits = false
-getfenv().autoBP = false
-getfenv().autoSpin = false
-getfenv().autoSell = false
-
--- Создание GUI
-local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "CustomVDFarmUI"
-ScreenGui.Parent = game:GetService("CoreGui")
-ScreenGui.ResetOnSpawn = false
-
-local MainFrame = Instance.new("Frame")
-MainFrame.Name = "MainFrame"
-MainFrame.Parent = ScreenGui
-MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
-MainFrame.BorderSizePixel = 0
-MainFrame.Position = UDim2.new(0.05, 0, 0.2, 0)
-MainFrame.Size = UDim2.new(0, 320, 0, 420)
-MainFrame.Active = true
-MainFrame.Draggable = true
-
-local UICorner = Instance.new("UICorner")
-UICorner.CornerRadius = UDim.new(0, 10)
-UICorner.Parent = MainFrame
-
-local Title = Instance.new("TextLabel")
-Title.Name = "Title"
-Title.Parent = MainFrame
-Title.BackgroundColor3 = Color3.fromRGB(35, 35, 50)
-Title.Size = UDim2.new(1, 0, 0, 40)
-Title.Font = Enum.Font.SourceSansBold
-Title.Text = "Vehicle Dealership Hub"
-Title.TextColor3 = Color3.fromRGB(255, 255, 255)
-Title.TextSize = 18
-
-local TitleCorner = Instance.new("UICorner")
-TitleCorner.CornerRadius = UDim.new(0, 10)
-TitleCorner.Parent = Title
-
-local Container = Instance.new("ScrollingFrame")
-Container.Parent = MainFrame
-Container.Position = UDim2.new(0, 10, 0, 50)
-Container.Size = UDim2.new(1, -20, 1, -60)
-Container.BackgroundTransparency = 1
-Container.ScrollBarThickness = 4
-
-local UIListLayout = Instance.new("UIListLayout")
-UIListLayout.Parent = Container
-UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
-UIListLayout.Padding = UDim.new(0, 8)
-
--- Функция создания тумблеров (Toggle)
-local function CreateToggle(name, callback)
-    local state = false
-    local Button = Instance.new("TextButton")
-    Button.Size = UDim2.new(1, 0, 0, 35)
-    Button.BackgroundColor3 = Color3.fromRGB(45, 45, 60)
-    Button.Font = Enum.Font.SourceSansSemibold
-    Button.Text = name .. ": OFF"
-    Button.TextColor3 = Color3.fromRGB(200, 200, 200)
-    Button.TextSize = 15
-    Button.Parent = Container
-
-    local BtnCorner = Instance.new("UICorner")
-    BtnCorner.CornerRadius = UDim.new(0, 6)
-    BtnCorner.Parent = Button
-
-    Button.MouseButton1Click:Connect(function()
-        state = not state
-        if state then
-            Button.BackgroundColor3 = Color3.fromRGB(0, 170, 100)
-            Button.Text = name .. ": ON"
-            Button.TextColor3 = Color3.fromRGB(255, 255, 255)
-        else
-            Button.BackgroundColor3 = Color3.fromRGB(45, 45, 60)
-            Button.Text = name .. ": OFF"
-            Button.TextColor3 = Color3.fromRGB(200, 200, 200)
-        end
-        callback(state)
-    end)
-end
-
--- Функция создания текстового поля (TextBox)
-local function CreateBox(placeholder, callback)
-    local Box = Instance.new("TextBox")
-    Box.Size = UDim2.new(1, 0, 0, 35)
-    Box.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
-    Box.Font = Enum.Font.SourceSans
-    Box.PlaceholderText = placeholder
-    Box.Text = ""
-    Box.TextColor3 = Color3.fromRGB(255, 255, 255)
-    Box.TextSize = 14
-    Box.Parent = Container
-
-    local BoxCorner = Instance.new("UICorner")
-    BoxCorner.CornerRadius = UDim.new(0, 6)
-    BoxCorner.Parent = Box
-
-    Box.FocusLost:Connect(function()
-        callback(Box.Text)
-    end)
-end
-
--- ЭЛЕМЕНТЫ ИНТЕРФЕЙСА:
-
-CreateBox("Введите скорость езды (По умолч: 1000)", function(val)
-    local num = tonumber(val)
-    if num then
-        getfenv().speed = num
+    workspace.Gravity = getfenv().grav
+    while getfenv().auto do
+        task.wait()
+        pcall(function()
+            local chr = game.Players.LocalPlayer.Character
+            if chr and chr:FindFirstChild("Humanoid") and chr.Humanoid.SeatPart then
+                local car = chr.Humanoid.SeatPart.Parent.Parent
+                if not workspace:FindFirstChild("justapart") then
+                    local new = Instance.new("Part", workspace)
+                    new.Name = "justapart"
+                    new.Size = Vector3.new(10000,20,10000)
+                    new.Anchored = true
+                    new.Position = chr.HumanoidRootPart.Position + Vector3.new(0,1000,0)
+                end
+                car:PivotTo(workspace:FindFirstChild("justapart").CFrame * CFrame.new(0,10,1000))
+                local pos = workspace:FindFirstChild("justapart").CFrame * CFrame.new(0,10,-1000)
+                local dist = (car.PrimaryPart.Position - pos.Position).magnitude
+                local speed = getfenv().speed or 300
+                car.PrimaryPart.AssemblyLinearVelocity = car.PrimaryPart.CFrame.LookVector * speed
+                local TweenService = game:GetService("TweenService")
+                local TweenInfoToUse = TweenInfo.new(dist/speed, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut, 0, true, 0)
+                local TweenValue = Instance.new("CFrameValue")
+                TweenValue.Value = car.WorldPivot
+                TweenValue.Changed:Connect(function()
+                    car.PrimaryPart.AssemblyLinearVelocity = car.PrimaryPart.CFrame.LookVector * speed
+                    car:PivotTo(TweenValue.Value)
+                    car.PrimaryPart.AssemblyLinearVelocity = car.PrimaryPart.CFrame.LookVector * speed
+                end)
+                local OnTween = TweenService:Create(TweenValue, TweenInfoToUse, {Value=pos})
+                OnTween:Play()
+                OnTween.Completed:Wait()
+                car.PrimaryPart.AssemblyLinearVelocity = car.PrimaryPart.CFrame.LookVector * speed
+            end
+        end)
     end
 end)
 
-CreateToggle("Auto Farm Miles", function(state)
-    getfenv().autoFarm = state
-    if state then
-        task.spawn(function()
-            while getfenv().autoFarm do
-                task.wait()
-                pcall(function()
-                    local chr = game.Players.LocalPlayer.Character
-                    if chr and chr:FindFirstChild("Humanoid") and chr.Humanoid.SeatPart then
-                        local car = chr.Humanoid.SeatPart.Parent.Parent
-                        if not workspace:FindFirstChild("justapart") then
-                            local new = Instance.new("Part", workspace)
-                            new.Name = "justapart"
-                            new.Size = Vector3.new(10000, 20, 10000)
-                            new.Anchored = true
-                            new.Position = chr.HumanoidRootPart.Position + Vector3.new(0, 1000, 0)
+example:AddToggle("Auto Farm Collectibles", function(state)
+    getfenv().collectables = (state and true or false)
+    while getfenv().collectables do
+        task.wait()
+        pcall(function()
+            local chr = game.Players.LocalPlayer.Character
+            if chr and chr:FindFirstChild("Humanoid") and chr.Humanoid.SeatPart then
+                local car = chr.Humanoid.SeatPart.Parent.Parent
+                local collect = workspace:FindFirstChild("Collectibles")
+                if collect then
+                    for i,v in pairs(collect:GetDescendants()) do
+                        if v:IsA("Model") and v.Parent ~= nil and v.Parent.Parent == collect and v.PrimaryPart ~= nil and v:GetChildren()[2] and v:GetChildren()[2]:FindFirstChild("Part") and v:GetChildren()[2].Part:FindFirstChildOfClass("BillboardGui") and v:GetChildren()[2].Part:FindFirstChildOfClass("BillboardGui").Enabled then
+                            car:PivotTo(v.PrimaryPart.CFrame)
+                            break
                         end
-                        car:PivotTo(workspace:FindFirstChild("justapart").CFrame * CFrame.new(0, 10, 1000))
-                        local pos = workspace:FindFirstChild("justapart").CFrame * CFrame.new(0, 10, -1000)
-                        local dist = (car.PrimaryPart.Position - pos.Position).magnitude
-                        local spd = getfenv().speed or 1000
-                        
-                        car.PrimaryPart.AssemblyLinearVelocity = car.PrimaryPart.CFrame.LookVector * spd
-                        local TweenService = game:GetService("TweenService")
-                        local TweenInfoToUse = TweenInfo.new(dist/spd, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut, 0, true, 0)
-                        local TweenValue = Instance.new("CFrameValue")
-                        TweenValue.Value = car.WorldPivot
-                        TweenValue.Changed:Connect(function()
-                            car.PrimaryPart.AssemblyLinearVelocity = car.PrimaryPart.CFrame.LookVector * spd
-                            car:PivotTo(TweenValue.Value)
-                        end)
-                        local OnTween = TweenService:Create(TweenValue, TweenInfoToUse, {Value = pos})
-                        OnTween:Play()
-                        OnTween.Completed:Wait()
                     end
-                end)
+                end
             end
         end)
     end
 end)
 
-CreateToggle("Auto Open Deluxe/Normal Kits", function(state)
-    getfenv().autoKits = state
-    if state then
-        task.spawn(function()
-            while getfenv().autoKits do
-                pcall(function()
-                    local consume = game:GetService("ReplicatedStorage").Remotes.Services.ConsumableServiceRemotes.Consume
-                    local kits = {"DecorationKitDeluxe", "DecorationKit", "DeluxeCustomizationKit", "CustomizationKit"}
-                    for _, kit in ipairs(kits) do
-                        if not getfenv().autoKits then break end
-                        consume:InvokeServer(kit)
-                        task.wait(0.1)
-                    end
-                end)
-                task.wait(0.5)
-            end
+example:AddToggle("Auto Open Vehicle Kit", function(state)
+    getfenv().open = (state and true or false)
+    while getfenv().open do
+        task.wait()
+        pcall(function()
+            game:GetService("ReplicatedStorage").Remotes.Services.CarKitEventServiceRemotes.ClaimFreePack:InvokeServer()
         end)
     end
 end)
 
-CreateToggle("Auto Claim BattlePass", function(state)
-    getfenv().autoBP = state
-    if state then
-        task.spawn(function()
-            while getfenv().autoBP do
-                pcall(function()
-                    local service = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes") and game.ReplicatedStorage.Remotes.Services:FindFirstChild("TrophySeasonRemotes")
-                    if service then
-                        local claim = service:FindFirstChild("ClaimLevelReward")
-                        if claim then
-                            for i = 1, 50 do
-                                if not getfenv().autoBP then break end
-                                claim:InvokeServer(i, "Free")
-                                claim:InvokeServer(i, "Premium")
-                                task.wait(0.05)
+example:AddToggle("Auto Extinguish Fire", function(state)
+    getfenv().fireman = (state and true or false)
+    workspace.Gravity = 196
+    while getfenv().fireman do
+        task.wait()
+        workspace.Gravity = 196
+        pcall(function()
+            if game.Players.LocalPlayer.Character and game.Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                game.Players.LocalPlayer.Character.HumanoidRootPart.Velocity = Vector3.new(0,0,0)
+                if not game.Players.LocalPlayer.Backpack:FindFirstChildOfClass("Tool") and not game.Players.LocalPlayer.Character:FindFirstChildOfClass("Tool") then
+                    game:GetService("ReplicatedStorage").Remotes.Switch:FireServer("FireDealership")
+                    task.wait(10)
+                elseif game.Players.LocalPlayer.Backpack:FindFirstChildOfClass("Tool") then
+                    game.Players.LocalPlayer.Character.Humanoid:EquipTool(game.Players.LocalPlayer.Backpack:FindFirstChildOfClass("Tool"))
+                    task.wait(1)
+                elseif game.Players.LocalPlayer.Character:FindFirstChildOfClass("Tool") then
+                    if game:GetService("Players").LocalPlayer.PlayerGui:FindFirstChild("FireGuide") then
+                        local test = nil
+                        for i,v in pairs(workspace:GetDescendants()) do
+                            if v.Name == "FirePart" then
+                                test = v
+                                game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame = v.CFrame
                             end
                         end
-                    end
-                end)
-                task.wait(4)
-            end
-        end)
-    end
-end)
-
-CreateToggle("Auto Wheel Spin", function(state)
-    getfenv().autoSpin = state
-    if state then
-        task.spawn(function()
-            while getfenv().autoSpin do
-                pcall(function()
-                    local spinRemote = game:GetService("ReplicatedStorage").Databases.Spinners.SpinEvent
-                    spinRemote:InvokeServer("Standard", "Free")
-                    spinRemote:InvokeServer("Hyper", "Free")
-                end)
-                task.wait(1)
-            end
-        end)
-    end
-end)
-
-CreateToggle("Auto Sell Tycoon Cars (NPC)", function(state)
-    getfenv().autoSell = state
-    if state then
-        task.spawn(function()
-            while getfenv().autoSell do
-                task.wait(1)
-                pcall(function()
-                    local tycoon
-                    for _, v in pairs(workspace.Tycoons:GetDescendants()) do
-                        if v.Name == "Owner" and v.Value == game.Players.LocalPlayer.Name then
-                            tycoon = v.Parent
-                        end
-                    end
-                    if tycoon and tycoon:FindFirstChild("Dealership") then
-                        local customer
-                        for _, v in pairs(tycoon.Dealership:GetChildren()) do
-                            if v:IsA("Model") and v.PrimaryPart and v.PrimaryPart.Name == "HumanoidRootPart" then
-                                customer = v
-                                break
-                            end
-                        end
-                        if customer then
-                            local text = customer:GetAttribute("OrderSpecBudget"):split(";")
-                            local num = tonumber(text[2])
-                            local selectedCar
-                            for _, v in pairs(require(game:GetService("ReplicatedStorage").Data.CarShopEntries).CarsInShop) do
-                                if v.PriceValue and v.PriceValue > tonumber(text[1]) and v.PriceValue < tonumber(text[2]) then
-                                    if v.PriceValue < num then
-                                        num = v.PriceValue
-                                        selectedCar = v
-                                    end
+                        if test == nil then
+                            game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame = game:GetService("Players").LocalPlayer.PlayerGui.FireGuide.Adornee.CFrame
+                        elseif test ~= nil then
+                            for i,v in pairs(test.Parent:GetDescendants()) do
+                                if (v.ClassName == "Part" or v.ClassName == "MeshPart") and v.CanCollide == true then
+                                    v.CanCollide = false
                                 end
                             end
-                            local remotes = game:GetService("ReplicatedStorage").Remotes.DealershipCustomerController.NPCHandler
-                            remotes:FireServer({["Action"] = "AcceptOrder", ["OrderId"] = customer:GetAttribute("OrderId")})
-                            task.wait(0.2)
-                            remotes:FireServer({
-                                ["OrderId"] = customer:GetAttribute("OrderId"),
-                                ["Action"] = "CompleteOrder",
-                                ["Specs"] = {
-                                    ["Car"] = selectedCar.Id,
-                                    ["Color"] = customer:GetAttribute("OrderSpecColor"),
-                                    ["Rims"] = customer:GetAttribute("OrderSpecRims"),
-                                    ["Springs"] = customer:GetAttribute("OrderSpecSprings"),
-                                    ["RimColor"] = customer:GetAttribute("OrderSpecRimColor")
-                                }
-                            })
-                            task.wait(0.2)
-                            remotes:FireServer({["Action"] = "CollectReward", ["OrderId"] = customer:GetAttribute("OrderId")})
+                            workspace.Gravity = 0
+                            repeat task.wait()
+                                game:GetService("ReplicatedStorage").Remotes.TaskController.ActionGameDataReplication:FireServer("TryInteractWithItem", {["GameName"] = "FirefighterGame",["Action"] = "UpdatePlayerToolState",["Data"] = {["IsActive"] = true,["ToolName"] = "Extinguisher"}})
+                                game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame = test.CFrame * CFrame.new(0,10,0)
+                                game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame = game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame * CFrame.Angles(math.rad(-90),0,0)
+                            until not game:GetService("Players").LocalPlayer.PlayerGui:FindFirstChild("FireGuide")
+                            game.Players.LocalPlayer.Character.HumanoidRootPart.Velocity = Vector3.new(0,0,0)
+                            task.wait(5)
+                            game:GetService("ReplicatedStorage").Remotes.TaskController.ActionGameDataReplication:FireServer("TryInteractWithItem", {["GameName"] = "FirefighterGame",["Action"] = "TryToCollectReward",["Data"] = {}})
                         end
                     end
-                end)
+                end
             end
         end)
     end
 end)
 
-print("Скрипт успешно запущен, окно расположено слева вверху!")
+example:AddToggle("Auto Sell Cars", function(state)
+    getfenv().Customer = (state and true or false)
+    while getfenv().Customer do
+        task.wait()
+        pcall(function()
+            local tycoon
+            for i,v in pairs(workspace.Tycoons:GetDescendants()) do
+                if v.Name == "Owner" and v.ClassName == "StringValue" and (string.find(v.Parent.Name,"Plot") or string.find(v.Parent.Name,"Slot")) and v.Value == game.Players.LocalPlayer.Name then
+                    tycoon = v.Parent
+                end
+            end
+            if tycoon and tycoon:FindFirstChild("Dealership") then
+                _G.rat = nil
+                local customer = nil
+                for i,v in pairs(tycoon.Dealership:GetChildren()) do
+                    if v.ClassName == "Model" and v.PrimaryPart ~= nil and v.PrimaryPart.Name == "HumanoidRootPart" then
+                        customer = v
+                    end
+                end
+                if customer ~= nil then
+                    task.wait(5)
+                    local text = customer:GetAttribute("OrderSpecBudget"):split(";")
+                    local num = tonumber(text[2])
+                    for i,v in pairs(require(game:GetService("ReplicatedStorage").Data.CarShopEntries).CarsInShop) do
+                        if v.PriceValue and v.PriceValue > tonumber(text[1]) and v.PriceValue < tonumber(text[2]) then
+                            local ok = v.PriceValue
+                            if ok < num then
+                                num = ok
+                                _G.rat = v
+                            end
+                        end
+                    end
+                    game:GetService("ReplicatedStorage").Remotes.DealershipCustomerController.NPCHandler:FireServer({["Action"] = "AcceptOrder",["OrderId"] = customer:GetAttribute("OrderId")})
+                    task.wait()
+                    game:GetService("ReplicatedStorage").Remotes.DealershipCustomerController.NPCHandler:FireServer({["OrderId"] = customer:GetAttribute("OrderId"),["Action"] = "CompleteOrder",["Specs"] = {["Car"] = _G.rat.Id,["Color"] = customer:GetAttribute("OrderSpecColor"),["Rims"] = customer:GetAttribute("OrderSpecRims"),["Springs"] = customer:GetAttribute("OrderSpecSprings"),["RimColor"] = customer:GetAttribute("OrderSpecRimColor")}})
+                    task.wait()
+                    game:GetService("ReplicatedStorage").Remotes.DealershipCustomerController.NPCHandler:FireServer({["Action"] = "CollectReward",["OrderId"] = customer:GetAttribute("OrderId")})
+                    repeat task.wait() until customer.Parent == nil or getfenv().Customer == false
+                    task.wait(5)
+                end
+            end
+        end)
+    end
+end)
+
+example:AddToggle("Annoying Popup Disabler", function(state)
+    getfenv().annoy = (state and true or false)
+    if getfenv().annoy == true then
+        getfenv().fun = game:GetService("Players").LocalPlayer.PlayerGui.ChildAdded:Connect(function(ok)
+            if ok.Name == "Popup2" then ok:Destroy() end
+        end)
+    elseif getfenv().annoy == false then
+        if getfenv().fun then getfenv().fun:Disconnect() end
+    end
+end)
+
+-- ======================== ОКНО 2: Delivery Options ========================
+local example2 = library:CreateWindow({ text = "Delivery Options" })
+
+example2:AddLabel("Minimum Stars", function() end)
+starman = example2:AddBox("Enter Star Amount", function(object, focus)
+    if focus then getfenv().stars = tonumber(object.Text) end
+end)
+
+example2:AddLabel("Minimum Reward Money", function() end)
+miniman = example2:AddBox("Enter Minimum Reward", function(object, focus)
+    if focus then getfenv().smaller = tonumber(object.Text) end
+end)
+
+example2:AddLabel("Maximum Reward Money", function() end)
+maxman = example2:AddBox("Enter Maximum Reward", function(object, focus)
+    if focus then getfenv().bigger = tonumber(object.Text) end
+end)
+
+-- ======================== ОКНО 3: Race ========================
+local example3 = library:CreateWindow({ text = "Race" })
+
+example3:AddBox("Enter Auto Race Speed", function(object, focus)
+    if focus then getfenv().speed = tonumber(object.Text) end
+end)
+
+-- ======================== ОКНО 4: Misc (Spins, Crates, Season) ========================
+local example4 = library:CreateWindow({ text = "Misc" })
+
+example4:AddButton("Force Load Map", function()
+    for i,v in pairs(workspace:GetDescendants()) do
+        if v.ClassName == "Model" and v:FindFirstChild("WorldPivot") then
+            task.spawn(function()
+                game.Players.LocalPlayer:RequestStreamAroundAsync(v.WorldPivot.Position, 1)
+            end)
+            task.wait()
+        end
+    end
+end)
+
+example4:AddLabel("Race Teleports", function() end)
+
+example4:AddDropdown(races(), function(state)
+    if state ~= "None" and workspace:FindFirstChild("Races") then
+        for i,v in pairs(workspace.Races:GetChildren()) do
+            if v.Name == state and v:FindFirstChildOfClass("UnionOperation") then
+                local chr = game.Players.LocalPlayer.Character
+                if chr and chr:FindFirstChild("Humanoid") then
+                    if chr.Humanoid.SeatPart == nil then
+                        chr.HumanoidRootPart.CFrame = v:FindFirstChildOfClass("UnionOperation").CFrame
+                    else
+                        local car = chr.Humanoid.SeatPart.Parent.Parent
+                        car:PivotTo(v:FindFirstChildOfClass("UnionOperation").CFrame)
+                    end
+                end
+                break
+            end
+        end
+    end
+end)
+
+example4:AddLabel("--- Sports Season Auto Claim ---", function() end)
+
+-- Тумблер авто-сбора наград сезона
+example4:AddToggle("Auto Claim Sports Season Rewards", function(state)
+    getfenv().claimSeason = (state and true or false)
+    
+    task.spawn(function()
+        while getfenv().claimSeason do
+            pcall(function()
+                local rep = game:GetService("ReplicatedStorage")
+                local remotes = rep:FindFirstChild("Remotes")
+                local services = remotes and remotes:FindFirstChild("Services")
+                
+                local seasonService = (services and (services:FindFirstChild("TrophySeasonRemotes") or services:FindFirstChild("SeasonService") or services:FindFirstChild("BattlePassService"))) 
+                    or (remotes and (remotes:FindFirstChild("TrophySeasonRemotes") or remotes:FindFirstChild("SeasonService")))
+                
+                if seasonService then
+                    local claimRemote = seasonService:FindFirstChild("ClaimLevelReward") or seasonService:FindFirstChild("ClaimReward") or seasonService:FindFirstChild("Claim")
+                    
+                    if claimRemote then
+                        for level = 1, 50 do
+                            if not getfenv().claimSeason do break end
+                            
+                            if claimRemote:IsA("RemoteFunction") then
+                                claimRemote:InvokeServer(level, "Free")
+                                claimRemote:InvokeServer(level, "Premium")
+                                claimRemote:InvokeServer(level, "Elite")
+                            elseif claimRemote:IsA("RemoteEvent") then
+                                claimRemote:FireServer(level, "Free")
+                                claimRemote:FireServer(level, "Premium")
+                                claimRemote:FireServer(level, "Elite")
+                            end
+                            task.wait(0.05)
+                        end
+                    end
+                end
+            end)
+            task.wait(3)
+        end
+    end)
+end)
+
+example4:AddLabel("--- Использование Наград ---", function() end)
+
+-- Тумблер открытия Китов (Normal & Deluxe)
+example4:AddToggle("Auto Open All Customization Kits", function(state)
+    getfenv().openAllKits = (state and true or false)
+    task.spawn(function()
+        while getfenv().openAllKits do
+            pcall(function()
+                local consume = game:GetService("ReplicatedStorage").Remotes.Services.ConsumableServiceRemotes.Consume
+                local kitNames = {
+                    "DecorationKit", 
+                    "DecorationKitDeluxe", 
+                    "RegularCustomizationKit", 
+                    "DeluxeCustomizationKit",
+                    "CustomizationKit"
+                }
+                for _, kit in ipairs(kitNames) do
+                    if not getfenv().openAllKits do break end
+                    consume:InvokeServer(kit)
+                    task.wait(0.1)
+                end
+            end)
+            task.wait(0.5)
+        end
+    end)
+end)
+
+-- Тумблер прокрутки всех полученных Спинов
+example4:AddToggle("Auto Spin (Standard & Hyper)", function(state)
+    getfenv().autoSpinAll = (state and true or false)
+    task.spawn(function()
+        while getfenv().autoSpinAll do
+            pcall(function()
+                local rep = game:GetService("ReplicatedStorage")
+                local spinRemote = rep:FindFirstChild("Databases") 
+                    and rep.Databases:FindFirstChild("Spinners") 
+                    and rep.Databases.Spinners:FindFirstChild("SpinEvent")
+                
+                if spinRemote then
+                    spinRemote:InvokeServer("Standard", "Free")
+                    spinRemote:InvokeServer("Hyper", "Free")
+                else
+                    local altSpin = rep:FindFirstChild("Remotes") 
+                        and rep.Remotes:FindFirstChild("Services") 
+                        and rep.Remotes.Services:FindFirstChild("SpinnerRemotes") 
+                        and rep.Remotes.Services.SpinnerRemotes:FindFirstChild("Spin")
+                    if altSpin then
+                        altSpin:InvokeServer("Standard")
+                        altSpin:InvokeServer("Hyper")
+                    end
+                end
+            end)
+            task.wait(1)
+        end
+    end)
+end)
+
+print("✅ Обновлённый скрипт успешно загружен!")
