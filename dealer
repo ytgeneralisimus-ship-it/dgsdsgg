@@ -1,5 +1,5 @@
 -- ============================================================
---           ОБЪЕДИНЁННЫЙ СКРИПТ (ИСПРАВЛЕННЫЙ)
+--           ОБЪЕДИНЁННЫЙ СКРИПТ (ФИНАЛЬНЫЙ)
 --   Все функции из предоставленных файлов, без дублей
 -- ============================================================
 
@@ -679,7 +679,7 @@ win4:AddToggle("Auto Spin Hyper", function(state)
     end)
 end)
 
--- ---- Авто-открытие китов ----
+-- ---- Авто-открытие китов (отдельные) ----
 win4:AddToggle("Auto Open Custom Crate", function(state)
     getfenv().deluxe1 = state
     task.spawn(function()
@@ -704,7 +704,9 @@ win4:AddToggle("Auto Open Delux Custom Crate", function(state)
     end)
 end)
 
--- ---- Новые функции ----
+-- ---- НОВЫЕ ФУНКЦИИ (из других скриптов) ----
+
+-- 1. Авто-сбор бесплатных подарков в магазине
 win4:AddToggle("Auto Claim Free Gifts (Store)", function(state)
     getfenv().claimFreeGift = state
     task.spawn(function()
@@ -723,6 +725,7 @@ win4:AddToggle("Auto Claim Free Gifts (Store)", function(state)
     end)
 end)
 
+-- 2. Улучшенный сбор наград сезона (Free, Premium, Elite)
 win4:AddToggle("Auto Claim ALL Season Rewards", function(state)
     getfenv().claimSeasonAll = state
     task.spawn(function()
@@ -742,10 +745,12 @@ win4:AddToggle("Auto Claim ALL Season Rewards", function(state)
                                 claimRemote:InvokeServer(level, "Free")
                                 claimRemote:InvokeServer(level, "Premium")
                                 claimRemote:InvokeServer(level, "Elite")
+                                claimRemote:InvokeServer(level) -- без второго аргумента
                             elseif claimRemote:IsA("RemoteEvent") then
                                 claimRemote:FireServer(level, "Free")
                                 claimRemote:FireServer(level, "Premium")
                                 claimRemote:FireServer(level, "Elite")
+                                claimRemote:FireServer(level)
                             end
                             task.wait(0.05)
                         end
@@ -757,6 +762,7 @@ win4:AddToggle("Auto Claim ALL Season Rewards", function(state)
     end)
 end)
 
+-- 3. Открытие всех видов китов (перебор названий)
 win4:AddToggle("Auto Open All Customization Kits", function(state)
     getfenv().openAllKits = state
     task.spawn(function()
@@ -775,6 +781,7 @@ win4:AddToggle("Auto Open All Customization Kits", function(state)
     end)
 end)
 
+-- 4. Комбинированный цикл (сезон + киты + спины)
 win4:AddToggle("Auto Loop All (Season + Kits + Spins)", function(state)
     getfenv().autoLoopAll = state
     task.spawn(function()
@@ -822,6 +829,7 @@ win4:AddToggle("Auto Loop All (Season + Kits + Spins)", function(state)
     end)
 end)
 
+-- 5. Авто-сбор токенов (упрощённый вариант)
 win4:AddToggle("Auto Claim Tokens", function(state)
     getfenv().claimTokens = state
     while getfenv().claimTokens do
