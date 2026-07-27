@@ -1,7 +1,8 @@
 -- ============================================================
---           ФИНАЛЬНЫЙ СКРИПТ (ВЕРСИЯ С БИБЛИОТЕКОЙ)
+--           ФИНАЛЬНЫЙ СКРИПТ ДЛЯ VEHICLE DEALERSHIP
 --   Все функции + исправления, сохранение настроек.
---   Исправлены пути для спинов, добавлены безопасные задержки.
+--   Исправлены: размер платформы для Auto Farm, AutoFarm laps.
+--   Используется внешняя UI библиотека.
 -- ============================================================
 
 -- ==================== СЛУЖЕБНЫЕ ФУНКЦИИ ====================
@@ -176,15 +177,20 @@ win1:AddToggle("Auto Farm (езда)", function(state)
                         if not workspace:FindFirstChild("justapart") then
                             local new = Instance.new("Part", workspace)
                             new.Name = "justapart"
-                            new.Size = Vector3.new(20000, 20, 20000)
+                            -- Динамический размер в зависимости от скорости
+                            local speed = getfenv().speed or 300
+                            local baseSize = 10000
+                            local sizeMultiplier = math.max(1, speed / 300)
+                            local size = baseSize * sizeMultiplier
+                            new.Size = Vector3.new(size, 20, size)
                             new.Anchored = true
                             new.Position = chr.HumanoidRootPart.Position + Vector3.new(0, 1000, 0)
                         end
+                        local speed = getfenv().speed or 300
+                        if speed > 2000 then speed = 2000 end
                         car:PivotTo(workspace.justapart.CFrame * CFrame.new(0, 10, 1000))
                         local pos = workspace.justapart.CFrame * CFrame.new(0, 10, -1000)
                         local dist = (car.PrimaryPart.Position - pos.Position).Magnitude
-                        local speed = getfenv().speed or 300
-                        if speed > 2000 then speed = 2000 end
                         car.PrimaryPart.AssemblyLinearVelocity = car.PrimaryPart.CFrame.LookVector * speed
                         local TweenService = game:GetService("TweenService")
                         local TweenInfoToUse = TweenInfo.new(dist/speed, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut, 0, true, 0)
@@ -1104,6 +1110,7 @@ win3:AddToggle("Auto Drift Race", function(state)
     end
 end)
 
+-- ========== ИСПРАВЛЕННЫЙ AutoFarm [laps|checkpoints] ==========
 win3:AddToggle("AutoFarm [laps|checkpoints]", function(state)
     settings.autoFarmLaps = state
     _G.racetest = state
@@ -1120,15 +1127,51 @@ win3:AddToggle("AutoFarm [laps|checkpoints]", function(state)
             end
         end
     end
+    if not race then return end
     local tpto = race and race.CFrame or CFrame.new()
     _G.remotetable1 = nil
     _G.remotetable2 = nil
     _G.remotetable3 = nil
+
+    -- Поиск ремоута Checkpoint и значения Laps
+    local checkpointRemote = nil
+    local lapsValue = 1
+    local raceParent = race.Parent
+    if raceParent then
+        -- Ищем скрипт, который содержит Checkpoint и Laps
+        local script = raceParent:FindFirstChild("Script")
+        if script then
+            local checkpoint = script:FindFirstChild("Checkpoint")
+            if checkpoint and checkpoint:IsA("RemoteEvent") then
+                checkpointRemote = checkpoint
+            end
+            local laps = script:FindFirstChild("Laps")
+            if laps and laps:IsA("NumberValue") then
+                lapsValue = laps.Value
+            end
+        end
+        -- Если не нашли, попробуем другие варианты
+        if not checkpointRemote then
+            -- Поиск по всем потомкам
+            for _, obj in pairs(raceParent:GetDescendants()) do
+                if obj.Name == "Checkpoint" and obj:IsA("RemoteEvent") then
+                    checkpointRemote = obj
+                    break
+                end
+            end
+        end
+        if not checkpointRemote then
+            warn("Checkpoint remote не найден, AutoFarm laps не будет работать")
+            return
+        end
+    end
+
     while _G.racetest do
         pcall(function()
             task.wait()
             local chr = game.Players.LocalPlayer.Character
             if not chr or not chr:FindFirstChild("Humanoid") then return end
+
             if game:GetService("Players").LocalPlayer.PlayerGui.Menu.Race.Visible == false and _G.remotetable1 ~= nil then
                 getfenv().firsttime = true
                 if chr.Humanoid.SeatPart then
@@ -1152,9 +1195,12 @@ win3:AddToggle("AutoFarm [laps|checkpoints]", function(state)
                     repeat task.wait() until game:GetService("Players").LocalPlayer.PlayerGui.Menu.Race.Visible == true or not _G.racetest
                 end
             elseif game:GetService("Players").LocalPlayer.PlayerGui.Menu.Race.Visible == true then
-                local count = #race.Parent.Checkpoints:GetChildren()
-                for i = 1, count * race.Parent.Script:FindFirstChild("Laps").Value do
-                    race.Parent.Script.Checkpoint:FireServer(i)
+                local checkpoints = raceParent:FindFirstChild("Checkpoints")
+                if not checkpoints then return end
+                local count = #checkpoints:GetChildren()
+                for i = 1, count * lapsValue do
+                    if not _G.racetest then break end
+                    checkpointRemote:FireServer(i)
                 end
             end
         end)
@@ -1273,7 +1319,6 @@ win4:AddBox("Pause between cycles (seconds, default 5)", function(object, focus)
         end
     end
 end)
-settings.cyclePause = 5
 
 win4:AddToggle("Auto Spin Standard (с количеством)", function(state)
     settings.autoSpinStandard = state
@@ -1607,8 +1652,6 @@ win5:AddToggle("Auto Use Deluxe Upgrade Kit", function(state)
     end)
 end)
 
--- ==== НОВЫЙ КОМБИНИРОВАННЫЙ ТОГГЛ ====
-win5:AddLabel("=== Авто-сбор подарков + спины ===")
 win5:AddToggle("Auto Collect Free Gifts & Spins", function(state)
     getfenv().autoCollectAll = state
     saveSettings()
@@ -1616,7 +1659,6 @@ win5:AddToggle("Auto Collect Free Gifts & Spins", function(state)
         local spinRemote = game:GetService("ReplicatedStorage"):WaitForChild("Databases"):WaitForChild("Spinners"):WaitForChild("Spin")
         while getfenv().autoCollectAll do
             pcall(function()
-                -- 1. Забираем бесплатный подарок из магазина
                 local claimRemote = game:GetService("ReplicatedStorage"):FindFirstChild("Databases")
                     and game.ReplicatedStorage.Databases:FindFirstChild("Store")
                     and game.ReplicatedStorage.Databases.Store:FindFirstChild("Featured")
@@ -1624,8 +1666,6 @@ win5:AddToggle("Auto Collect Free Gifts & Spins", function(state)
                 if claimRemote then
                     claimRemote:InvokeServer()
                 end
-
-                -- 2. Крутим Standard и Hyper спины (по одному разу за цикл)
                 spinRemote:InvokeServer("Standard", "Free")
                 task.wait(settings.spinDelay or 1.5)
                 spinRemote:InvokeServer("Hyper", "Free")
@@ -1636,7 +1676,6 @@ win5:AddToggle("Auto Collect Free Gifts & Spins", function(state)
     end)
 end)
 
--- ==== ПЕРЕНЕСЁННЫЕ ТОГГЛЫ (Auto Consume и Auto Purchase) ====
 win5:AddLabel("Auto Consume Item")
 win5:AddBox("Enter item name", function(object, focus)
     if focus then
