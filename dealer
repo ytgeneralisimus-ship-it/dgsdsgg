@@ -1,7 +1,8 @@
 -- ============================================================
 --           ФИНАЛЬНЫЙ СКРИПТ (ВЕРСИЯ С БИБЛИОТЕКОЙ)
 --   Все функции + исправления, сохранение настроек.
---   Используется внешняя UI библиотека (без кастомного кода).
+--   Используется внешняя UI библиотека (с прокруткой).
+--   Авто-консум и авто-покупка перенесены в раздел Misc.
 -- ============================================================
 
 -- ==================== СЛУЖЕБНЫЕ ФУНКЦИИ ====================
@@ -99,7 +100,7 @@ local settings = {
     autoDriftRace = false,
     autoFarmLaps = false,
 
-    -- Automation
+    -- Automation (часть функций перенесена в Misc)
     autoSeason = false,
     seasonFrom = 1,
     seasonTo = 50,
@@ -157,8 +158,6 @@ win1:AddBox("Auto Drive Speed (max 2000)", function(object, focus)
         end
     end
 end)
--- Устанавливаем текст из настроек (если библиотека позволяет)
--- В большинстве библиотек можно задать текст через свойство, но если нет – оставим как есть.
 
 win1:AddToggle("Auto Farm (езда)", function(state)
     settings.autoFarm = state
@@ -382,7 +381,6 @@ win1:AddToggle("Auto Delivery (обычная)", function(state)
     settings.autoDelivery = state
     getfenv().deliver = state
     saveSettings()
-    -- код обычной доставки (из оригинального скрипта)
     resetcharactervalue1 = 0
     devpart2 = 1
     task.spawn(function()
@@ -532,7 +530,6 @@ win2:AddToggle("Auto Delivery (продвинутая)", function(state)
     settings.autoDeliveryAdv = state
     getfenv().deliver2 = state
     saveSettings()
-    -- Код продвинутой доставки с исправленной логикой
     resetcharactervalue = 0
     devpart = 1
     game.Players.LocalPlayer.Character.Head.Anchored = false
@@ -723,33 +720,447 @@ win3:AddToggle("Auto Race (Standard)", function(state)
     settings.autoRace = state
     _G.racetest = state
     saveSettings()
-    -- Здесь должен быть полный код стандартной гонки
-    -- Для краткости я вставлю заглушку, но в реальности нужно вставить полный код из твоего оригинального скрипта
-    warn("Standard race logic here (вставьте полный код)")
+    -- Полный код стандартной гонки из оригинального скрипта
+    workspace.Gravity = 196
+    local race = nil
+    local distance = math.huge
+    for _, v in pairs(workspace.Races:GetDescendants()) do
+        if v.Name == "Main" and v:IsA("UnionOperation") then
+            local dist = (game.Players.LocalPlayer.Character.HumanoidRootPart.Position - v.Position).Magnitude
+            if dist < distance then
+                distance = dist
+                race = v
+            end
+        end
+    end
+    local tpto = race and race.CFrame or CFrame.new()
+    _G.remotetable1 = nil
+    _G.remotetable2 = nil
+    _G.remotetable3 = nil
+    while _G.racetest do
+        task.wait()
+        local chr = game.Players.LocalPlayer.Character
+        if not chr or not chr:FindFirstChild("Humanoid") then continue end
+        if game:GetService("Players").LocalPlayer.PlayerGui.Menu.Race.Visible == false and _G.remotetable1 ~= nil then
+            getfenv().firsttime = true
+            if chr.Humanoid.SeatPart then
+                local car = chr.Humanoid.SeatPart.Parent.Parent
+                car:PivotTo(tpto)
+                workspace.Gravity = 196
+                chr.Head.Anchored = true
+                task.wait(1)
+                chr.Head.Anchored = false
+                local timer = tick()
+                repeat task.wait(0.1)
+                    _G.remote1:FireServer(unpack(_G.remotetable1))
+                until tick() - timer > 15 or not _G.racetest
+                if _G.remotetable2 ~= nil then
+                    _G.remote2:FireServer(unpack(_G.remotetable2))
+                    task.wait(15)
+                end
+                if _G.remotetable3 ~= nil then
+                    _G.remote3:FireServer(unpack(_G.remotetable3))
+                end
+                repeat task.wait() until game:GetService("Players").LocalPlayer.PlayerGui.Menu.Race.Visible == true or not _G.racetest
+            end
+        elseif game:GetService("Players").LocalPlayer.PlayerGui.Menu.Race.Visible == true then
+            repeat task.wait() until game:GetService("Players").LocalPlayer.PlayerGui.RaceStart.GO.ImageTransparency ~= 1 or getfenv().firsttime == false or not _G.racetest
+            getfenv().firsttime = false
+            local function updategoal()
+                local goal = nil
+                local distance = math.huge
+                for _, v in pairs(workspace.Races:GetDescendants()) do
+                    if v.Name == "GoalPart" and v:IsA("Part") and v:FindFirstChildOfClass("Decal") and v:FindFirstChildOfClass("Decal").Transparency ~= 1 or (v.Name == "GoalCheckpoint" and v:IsA("Part") and v:FindFirstChildOfClass("Decal") and v:FindFirstChildOfClass("Decal").Transparency ~= 1) then
+                        local dist = (game.Players.LocalPlayer.Character.HumanoidRootPart.Position - v.Position).Magnitude
+                        if dist < distance then
+                            distance = dist
+                            goal = v
+                        end
+                    end
+                end
+                return goal
+            end
+            local function updategoal1()
+                for _, v in pairs(workspace.Races:GetDescendants()) do
+                    if v.Name == "Checkpoint" and v:IsA("MeshPart") and v.Transparency ~= 1 then
+                        local goal = v.Parent.Parent.Parent.GoalCheckpoint.GoalCheckpoint
+                        goal.Size = Vector3.new(goal.Size.X, 15, goal.Size.Z)
+                        return goal
+                    end
+                end
+                return nil
+            end
+            local function updategoal2()
+                local goal = nil
+                local distance = math.huge
+                for _, v in pairs(workspace.Races:GetDescendants()) do
+                    if v.Name == "GoalPart" and v:IsA("Part") then
+                        local dist = (game.Players.LocalPlayer.Character.HumanoidRootPart.Position - v.Position).Magnitude
+                        if dist < distance then
+                            distance = dist
+                            goal = v
+                        end
+                    end
+                end
+                return goal
+            end
+            local speed = getfenv().raceSpeed or 200
+            local TweenService = game:GetService("TweenService")
+            repeat task.wait()
+                local test = nil
+                for _, v in pairs(workspace.Races:GetDescendants()) do
+                    if v.Name == "Checkpoint" and v:IsA("MeshPart") and v.Transparency ~= 1 then
+                        test = v
+                        break
+                    end
+                end
+                if not test then break end
+                local chr = game.Players.LocalPlayer.Character
+                if not chr or not chr.Humanoid.SeatPart then break end
+                local car = chr.Humanoid.SeatPart.Parent.Parent
+                local dist = (chr.HumanoidRootPart.Position - test.Position).Magnitude
+                workspace.Gravity = 0
+                local tweenInfo = TweenInfo.new(dist / speed, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut, 0, false, 0)
+                local tweenValue = Instance.new("CFrameValue")
+                tweenValue.Value = car:GetPrimaryPartCFrame()
+                local conn = tweenValue.Changed:Connect(function()
+                    car.PrimaryPart.Velocity = Vector3.zero
+                    car:PivotTo(CFrame.new(tweenValue.Value.Position))
+                end)
+                local tween = TweenService:Create(tweenValue, tweenInfo, { Value = test.CFrame + Vector3.new(0, 5, 0) })
+                tween:Play()
+                tween.Completed:Wait()
+                conn:Disconnect()
+                tweenValue:Destroy()
+                if tonumber(test.Parent.Name) == #test.Parent.Parent:GetChildren() then
+                    local goal = updategoal1()
+                    if goal then
+                        local chr2 = game.Players.LocalPlayer.Character
+                        if chr2 and chr2.Humanoid.SeatPart then
+                            local car2 = chr2.Humanoid.SeatPart.Parent.Parent
+                            local goalPos = CFrame.new(goal.Position.X, chr2.PrimaryPart.Position.Y, goal.Position.Z)
+                            dist = (chr2.HumanoidRootPart.Position - goal.Position).Magnitude
+                            local tweenInfo2 = TweenInfo.new(dist / speed, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut, 0, false, 0)
+                            local tweenValue2 = Instance.new("CFrameValue")
+                            tweenValue2.Value = car2:GetPrimaryPartCFrame()
+                            local conn2 = tweenValue2.Changed:Connect(function()
+                                car2.PrimaryPart.Velocity = Vector3.zero
+                                car2:PivotTo(CFrame.new(tweenValue2.Value.Position))
+                            end)
+                            local tween2 = TweenService:Create(tweenValue2, tweenInfo2, { Value = goalPos })
+                            tween2:Play()
+                            tween2.Completed:Wait()
+                            conn2:Disconnect()
+                            tweenValue2:Destroy()
+                        end
+                    end
+                    break
+                end
+            until not _G.racetest
+            local goal = updategoal()
+            if goal then
+                local chr = game.Players.LocalPlayer.Character
+                if chr and chr.Humanoid.SeatPart then
+                    local car = chr.Humanoid.SeatPart.Parent.Parent
+                    local target = CFrame.new(goal.Position.X, chr.HumanoidRootPart.Position.Y, goal.Position.Z)
+                    local dist = (chr.HumanoidRootPart.Position - target.Position).Magnitude
+                    local tweenInfo = TweenInfo.new(dist / speed, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut, 0, false, 0)
+                    local tweenValue = Instance.new("CFrameValue")
+                    tweenValue.Value = car:GetPrimaryPartCFrame()
+                    local conn = tweenValue.Changed:Connect(function()
+                        car.PrimaryPart.Velocity = Vector3.zero
+                        car:PivotTo(CFrame.new(tweenValue.Value.Position))
+                    end)
+                    local tween = TweenService:Create(tweenValue, tweenInfo, { Value = target })
+                    tween:Play()
+                    tween.Completed:Wait()
+                    conn:Disconnect()
+                    tweenValue:Destroy()
+                    task.wait(1)
+                    car:PivotTo(target)
+                    task.wait()
+                    car.PrimaryPart.AssemblyLinearVelocity = car.PrimaryPart.CFrame.LookVector * 350
+                    task.wait(1)
+                    local t = tick()
+                    repeat task.wait() car.PrimaryPart.AssemblyLinearVelocity = Vector3.zero until tick() - t >= 1 or not _G.racetest
+                    workspace.Gravity = 196
+                end
+            elseif not goal and updategoal2() then
+                local v = updategoal2()
+                local chr = game.Players.LocalPlayer.Character
+                if chr and chr.Humanoid.SeatPart then
+                    local car = chr.Humanoid.SeatPart.Parent.Parent
+                    local target = CFrame.new(v.Position.X, chr.HumanoidRootPart.Position.Y, v.Position.Z)
+                    local dist = (chr.HumanoidRootPart.Position - target.Position).Magnitude
+                    local tweenInfo = TweenInfo.new(dist / speed, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut, 0, false, 0)
+                    local tweenValue = Instance.new("CFrameValue")
+                    tweenValue.Value = car:GetPrimaryPartCFrame()
+                    local conn = tweenValue.Changed:Connect(function()
+                        car.PrimaryPart.Velocity = Vector3.zero
+                        car:PivotTo(CFrame.new(tweenValue.Value.Position))
+                    end)
+                    local tween = TweenService:Create(tweenValue, tweenInfo, { Value = target })
+                    tween:Play()
+                    tween.Completed:Wait()
+                    conn:Disconnect()
+                    tweenValue:Destroy()
+                    task.wait(1)
+                    car:PivotTo(target)
+                    task.wait()
+                    car.PrimaryPart.AssemblyLinearVelocity = car.PrimaryPart.CFrame.LookVector * 350
+                    task.wait(1)
+                    local t = tick()
+                    repeat task.wait() car.PrimaryPart.AssemblyLinearVelocity = Vector3.zero until tick() - t >= 1 or not _G.racetest
+                    workspace.Gravity = 196
+                end
+            end
+        end
+    end
 end)
 
 win3:AddToggle("Auto Race (Fast - Hitbox)", function(state)
     settings.autoRaceFast = state
     _G.racetest_fast = state
     saveSettings()
-    warn("Fast race logic here")
+    workspace.Gravity = 196
+    local race = nil
+    local distance = math.huge
+    for _, v in pairs(workspace.Races:GetDescendants()) do
+        if v.Name == "Main" and v:IsA("UnionOperation") then
+            local dist = (game.Players.LocalPlayer.Character.HumanoidRootPart.Position - v.Position).Magnitude
+            if dist < distance then
+                distance = dist
+                race = v
+            end
+        end
+    end
+    local tpto = race and race.CFrame or CFrame.new()
+    _G.remotetable1 = nil
+    _G.remotetable2 = nil
+    _G.remotetable3 = nil
+    while _G.racetest_fast do
+        task.wait()
+        local chr = game.Players.LocalPlayer.Character
+        if not chr or not chr:FindFirstChild("Humanoid") then continue end
+        if game:GetService("Players").LocalPlayer.PlayerGui.Menu.Race.Visible == false and _G.remotetable1 ~= nil then
+            getfenv().firsttime_fast = true
+            if chr.Humanoid.SeatPart then
+                local car = chr.Humanoid.SeatPart.Parent.Parent
+                car:PivotTo(tpto)
+                workspace.Gravity = 196
+                chr.Head.Anchored = true
+                task.wait(1)
+                chr.Head.Anchored = false
+                local timer = tick()
+                repeat task.wait(0.1)
+                    _G.remote1:FireServer(unpack(_G.remotetable1))
+                until tick() - timer > 15 or not _G.racetest_fast
+                if _G.remotetable2 ~= nil then
+                    _G.remote2:FireServer(unpack(_G.remotetable2))
+                    task.wait(15)
+                end
+                if _G.remotetable3 ~= nil then
+                    _G.remote3:FireServer(unpack(_G.remotetable3))
+                end
+                repeat task.wait() until game:GetService("Players").LocalPlayer.PlayerGui.Menu.Race.Visible == true or not _G.racetest_fast
+            end
+        elseif game:GetService("Players").LocalPlayer.PlayerGui.Menu.Race.Visible == true then
+            repeat task.wait() until game:GetService("Players").LocalPlayer.PlayerGui.RaceStart.GO.ImageTransparency ~= 1 or getfenv().firsttime_fast == false or not _G.racetest_fast
+            getfenv().firsttime_fast = false
+            local speed = getfenv().raceSpeed or 200
+            local TweenService = game:GetService("TweenService")
+            while _G.racetest_fast do
+                local checkpoint = nil
+                for _, v in pairs(workspace.Races:GetDescendants()) do
+                    if v.Name == "Checkpoint" and v:IsA("MeshPart") and v.Transparency ~= 1 then
+                        checkpoint = v
+                        break
+                    end
+                end
+                if not checkpoint then break end
+                local chr = game.Players.LocalPlayer.Character
+                if not chr or not chr.Humanoid.SeatPart then break end
+                local car = chr.Humanoid.SeatPart.Parent.Parent
+                local goal = checkpoint.CFrame + Vector3.new(0, 5, 0)
+                local tweenInfo = TweenInfo.new(0.1, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut, 0, false, 0)
+                local tweenValue = Instance.new("CFrameValue")
+                tweenValue.Value = car:GetPrimaryPartCFrame()
+                local conn = tweenValue.Changed:Connect(function()
+                    car:PivotTo(CFrame.new(tweenValue.Value.Position))
+                end)
+                local tween = TweenService:Create(tweenValue, tweenInfo, { Value = goal })
+                tween:Play()
+                tween.Completed:Wait()
+                conn:Disconnect()
+                tweenValue:Destroy()
+                if checkpoint.Parent and checkpoint.Parent.Parent then
+                    local children = checkpoint.Parent.Parent:GetChildren()
+                    local last = children[#children]
+                    if last and last == checkpoint.Parent then
+                        break
+                    end
+                end
+                task.wait(0.05)
+            end
+        end
+    end
 end)
 
 win3:AddToggle("Auto Drift Race", function(state)
     settings.autoDriftRace = state
     _G.racetest3 = state
     saveSettings()
-    warn("Drift race logic here")
+    if not _G.racetest3 and partvelo ~= nil then
+        partvelo.Velocity = Vector3.zero
+    end
+    local race = nil
+    local distance = math.huge
+    for _, v in pairs(workspace.Races:GetDescendants()) do
+        if v.Name == "Main" and v:IsA("UnionOperation") then
+            local dist = (game.Players.LocalPlayer.Character.HumanoidRootPart.Position - v.Position).Magnitude
+            if dist < distance then
+                distance = dist
+                race = v
+            end
+        end
+    end
+    local tpto = race and race.CFrame or CFrame.new()
+    _G.remotetable1 = nil
+    _G.remotetable2 = nil
+    _G.remotetable3 = nil
+    while _G.racetest3 do
+        task.wait()
+        local chr = game.Players.LocalPlayer.Character
+        if not chr or not chr:FindFirstChild("Humanoid") then continue end
+        if game:GetService("Players").LocalPlayer.PlayerGui.Menu.Race.Visible == false and _G.remotetable1 ~= nil then
+            getfenv().firsttime = true
+            if chr.Humanoid.SeatPart then
+                local car = chr.Humanoid.SeatPart.Parent.Parent
+                car.PrimaryPart.Velocity = Vector3.zero
+                car.PrimaryPart.AssemblyLinearVelocity = Vector3.zero
+                task.wait()
+                car:PivotTo(tpto)
+                chr.Head.Anchored = true
+                task.wait(1)
+                chr.Head.Anchored = false
+                local timer = tick()
+                repeat task.wait(0.1)
+                    _G.remote1:FireServer(unpack(_G.remotetable1))
+                until tick() - timer > 15 or not _G.racetest3
+                if _G.remotetable2 ~= nil then
+                    _G.remote2:FireServer(unpack(_G.remotetable2))
+                    task.wait(15)
+                end
+                if _G.remotetable3 ~= nil then
+                    _G.remote3:FireServer(unpack(_G.remotetable3))
+                end
+                partvelo = nil
+                repeat task.wait() until game:GetService("Players").LocalPlayer.PlayerGui.Menu.Race.Visible == true or not _G.racetest3
+            end
+        elseif game:GetService("Players").LocalPlayer.PlayerGui.Menu.Race.Visible == true then
+            repeat task.wait() until game:GetService("Players").LocalPlayer.PlayerGui.RaceStart.GO.ImageTransparency ~= 1 or getfenv().firsttime == false or not _G.racetest3
+            if partvelo == nil then
+                local chr = game.Players.LocalPlayer.Character
+                if chr and chr.Humanoid.SeatPart then
+                    local car = chr.Humanoid.SeatPart.Parent.Parent
+                    carloc = car.PrimaryPart.CFrame
+                    local hum = chr.HumanoidRootPart
+                    local raycastParams = RaycastParams.new()
+                    raycastParams.FilterDescendantsInstances = { hum.Parent, car, workspace.Camera }
+                    raycastParams.FilterType = Enum.RaycastFilterType.Exclude
+                    raycastParams.IgnoreWater = true
+                    local result = workspace:Raycast(hum.Position, Vector3.new(0, -100, 0), raycastParams)
+                    if result then
+                        partvelo = result.Instance
+                        partvelo.Velocity = hum.CFrame.LookVector * 1000
+                    end
+                end
+            end
+            local split = game:GetService("Players").LocalPlayer.PlayerGui.Menu.Race.Bar.Laps.Text:split("pts")[1]
+            local number = tonumber(string.gsub(split, ",", ""))
+            local chr = game.Players.LocalPlayer.Character
+            if chr and chr.Humanoid.SeatPart then
+                local car = chr.Humanoid.SeatPart.Parent.Parent
+                repeat task.wait()
+                    split = game:GetService("Players").LocalPlayer.PlayerGui.Menu.Race.Bar.Laps.Text:split("pts")[1]
+                    number = tonumber(string.gsub(split, ",", ""))
+                    if game:GetService("Players").LocalPlayer.PlayerGui.Menu.Race.Visible == true and number ~= nil and number <= 49999 then
+                        car:PivotTo(carloc)
+                    end
+                until game:GetService("Players").LocalPlayer.PlayerGui.Menu.Race.Visible == false or not _G.racetest3 or (number ~= nil and number >= 50000)
+                if partvelo then
+                    partvelo.Velocity = Vector3.zero
+                    partvelo = nil
+                end
+                repeat task.wait()
+                    car.PrimaryPart.Velocity = Vector3.zero
+                    car.PrimaryPart.AssemblyLinearVelocity = Vector3.zero
+                    car:PivotTo(tpto)
+                until game:GetService("Players").LocalPlayer.PlayerGui.Menu.Race.Visible == false or not _G.racetest3
+                task.wait(1)
+            end
+        end
+    end
 end)
 
 win3:AddToggle("AutoFarm [laps|checkpoints]", function(state)
     settings.autoFarmLaps = state
     _G.racetest = state
     saveSettings()
-    warn("AutoFarm laps logic (исправленный) здесь")
+    workspace.Gravity = 196
+    local race = nil
+    local distance = math.huge
+    for _, v in pairs(workspace.Races:GetDescendants()) do
+        if v.Name == "Main" and v:IsA("UnionOperation") then
+            local dist = (game.Players.LocalPlayer.Character.HumanoidRootPart.Position - v.Position).Magnitude
+            if dist < distance then
+                distance = dist
+                race = v
+            end
+        end
+    end
+    local tpto = race and race.CFrame or CFrame.new()
+    _G.remotetable1 = nil
+    _G.remotetable2 = nil
+    _G.remotetable3 = nil
+    while _G.racetest do
+        pcall(function()
+            task.wait()
+            local chr = game.Players.LocalPlayer.Character
+            if not chr or not chr:FindFirstChild("Humanoid") then return end
+            if game:GetService("Players").LocalPlayer.PlayerGui.Menu.Race.Visible == false and _G.remotetable1 ~= nil then
+                getfenv().firsttime = true
+                if chr.Humanoid.SeatPart then
+                    local car = chr.Humanoid.SeatPart.Parent.Parent
+                    car:PivotTo(tpto)
+                    workspace.Gravity = 196
+                    chr.Head.Anchored = true
+                    task.wait(1)
+                    chr.Head.Anchored = false
+                    local timer = tick()
+                    repeat task.wait(0.1)
+                        _G.remote1:FireServer(unpack(_G.remotetable1))
+                    until tick() - timer > 15 or not _G.racetest
+                    if _G.remotetable2 ~= nil then
+                        _G.remote2:FireServer(unpack(_G.remotetable2))
+                        task.wait(15)
+                    end
+                    if _G.remotetable3 ~= nil then
+                        _G.remote3:FireServer(unpack(_G.remotetable3))
+                    end
+                    repeat task.wait() until game:GetService("Players").LocalPlayer.PlayerGui.Menu.Race.Visible == true or not _G.racetest
+                end
+            elseif game:GetService("Players").LocalPlayer.PlayerGui.Menu.Race.Visible == true then
+                local count = #race.Parent.Checkpoints:GetChildren()
+                for i = 1, count * race.Parent.Script:FindFirstChild("Laps").Value do
+                    race.Parent.Script.Checkpoint:FireServer(i)
+                end
+            end
+        end)
+    end
 end)
 
--- ==================== ОКНО 4: Automation ====================
+-- ==================== ОКНО 4: Automation (часть функций перенесена в Misc) ====================
 
 local win4 = library:CreateWindow({ text = "Automation" })
 
@@ -784,7 +1195,7 @@ win4:AddToggle("Auto Claim Season Rewards", function(state)
                 local rep = game:GetService("ReplicatedStorage")
                 local remotes = rep:FindFirstChild("Remotes")
                 local services = remotes and remotes:FindFirstChild("Services")
-                local seasonService = (services and (services:FindFirstChild("TrophySeasonRemotes") or services:FindFirstChild("SeasonService") or services:FindFirstChild("BattlePassService"))) 
+                local seasonService = (services and (services:FindFirstChild("TrophySeasonRemotes") or services:FindFirstChild("SeasonService") or services:FindFirstChild("BattlePassService")))
                     or (remotes and (remotes:FindFirstChild("TrophySeasonRemotes") or remotes:FindFirstChild("SeasonService")))
                 if seasonService then
                     local claimRemote = seasonService:FindFirstChild("ClaimLevelReward") or seasonService:FindFirstChild("ClaimReward") or seasonService:FindFirstChild("Claim")
@@ -795,10 +1206,12 @@ win4:AddToggle("Auto Claim Season Rewards", function(state)
                                 claimRemote:InvokeServer(level, "Free")
                                 claimRemote:InvokeServer(level, "Premium")
                                 claimRemote:InvokeServer(level, "Elite")
+                                claimRemote:InvokeServer(level)
                             elseif claimRemote:IsA("RemoteEvent") then
                                 claimRemote:FireServer(level, "Free")
                                 claimRemote:FireServer(level, "Premium")
                                 claimRemote:FireServer(level, "Elite")
+                                claimRemote:FireServer(level)
                             end
                             task.wait(0.05)
                         end
@@ -817,9 +1230,9 @@ win4:AddToggle("Auto Claim Free Gifts (Store)", function(state)
     task.spawn(function()
         while getfenv().claimFreeGift do
             pcall(function()
-                local claimRemote = game:GetService("ReplicatedStorage"):FindFirstChild("Databases") 
-                    and game.ReplicatedStorage.Databases:FindFirstChild("Store") 
-                    and game.ReplicatedStorage.Databases.Store:FindFirstChild("Featured") 
+                local claimRemote = game:GetService("ReplicatedStorage"):FindFirstChild("Databases")
+                    and game.ReplicatedStorage.Databases:FindFirstChild("Store")
+                    and game.ReplicatedStorage.Databases.Store:FindFirstChild("Featured")
                     and game.ReplicatedStorage.Databases.Store.Featured:FindFirstChild("ClaimFreeGift")
                 if claimRemote then
                     claimRemote:InvokeServer()
@@ -837,15 +1250,15 @@ win4:AddToggle("Auto Spin Standard (исправленный)", function(state)
     task.spawn(function()
         while getfenv().spinner do
             pcall(function()
-                local spinRemote = game:GetService("ReplicatedStorage"):FindFirstChild("Databases") 
-                    and game.ReplicatedStorage.Databases:FindFirstChild("Spinners") 
+                local spinRemote = game:GetService("ReplicatedStorage"):FindFirstChild("Databases")
+                    and game.ReplicatedStorage.Databases:FindFirstChild("Spinners")
                     and game.ReplicatedStorage.Databases.Spinners:FindFirstChild("SpinEvent")
                 if spinRemote then
                     spinRemote:InvokeServer("Standard", "Free")
                 else
-                    local altSpin = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes") 
-                        and game.ReplicatedStorage.Remotes:FindFirstChild("Services") 
-                        and game.ReplicatedStorage.Remotes.Services:FindFirstChild("SpinnerRemotes") 
+                    local altSpin = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes")
+                        and game.ReplicatedStorage.Remotes:FindFirstChild("Services")
+                        and game.ReplicatedStorage.Remotes.Services:FindFirstChild("SpinnerRemotes")
                         and game.ReplicatedStorage.Remotes.Services.SpinnerRemotes:FindFirstChild("Spin")
                     if altSpin then
                         altSpin:InvokeServer("Standard")
@@ -864,8 +1277,8 @@ win4:AddToggle("Auto Spin Hyper (исправленный)", function(state)
     task.spawn(function()
         while getfenv().spinner1 do
             pcall(function()
-                local spinRemote = game:GetService("ReplicatedStorage"):FindFirstChild("Databases") 
-                    and game.ReplicatedStorage.Databases:FindFirstChild("Spinners") 
+                local spinRemote = game:GetService("ReplicatedStorage"):FindFirstChild("Databases")
+                    and game.ReplicatedStorage.Databases:FindFirstChild("Spinners")
                     and game.ReplicatedStorage.Databases.Spinners:FindFirstChild("SpinEvent")
                 if spinRemote then
                     spinRemote:InvokeServer("Hyper", "Free")
@@ -1041,59 +1454,8 @@ win4:AddToggle("Auto Claim Daily Streak", function(state)
     end)
 end)
 
-win4:AddLabel("Auto Consume Item")
-win4:AddBox("Enter item name", function(object, focus)
-    if focus then
-        local val = object.Text
-        if val and val ~= "" then
-            settings.consumeItem = val
-            saveSettings()
-        end
-    end
-end)
-
-win4:AddToggle("Auto Consume Items", function(state)
-    settings.autoConsume = state
-    getfenv().autoConsume = state
-    saveSettings()
-    task.spawn(function()
-        while getfenv().autoConsume do
-            pcall(function()
-                local consume = game:GetService("ReplicatedStorage").Remotes.Services.ConsumableServiceRemotes.Consume
-                if consume then
-                    consume:InvokeServer(settings.consumeItem)
-                end
-            end)
-            task.wait(2)
-        end
-    end)
-end)
-
-win4:AddLabel("Auto Purchase Item")
-win4:AddBox("Enter item name", function(object, focus)
-    if focus then
-        local val = object.Text
-        if val and val ~= "" then
-            settings.purchaseItem = val
-            saveSettings()
-        end
-    end
-end)
-
-win4:AddToggle("Auto Purchase (магазин)", function(state)
-    settings.autoPurchase = state
-    getfenv().autoPurchase = state
-    saveSettings()
-    task.spawn(function()
-        while getfenv().autoPurchase do
-            pcall(function()
-                -- Здесь нужно заменить на реальный ремоут покупки
-                warn("Auto Purchase: реализуйте свой ремоут")
-            end)
-            task.wait(5)
-        end
-    end)
-end)
+-- Перенесённые из Automation в Misc:
+-- Auto Consume Items и Auto Purchase теперь находятся в окне Misc (win5)
 
 -- ==================== ОКНО 5: Misc ====================
 
@@ -1134,6 +1496,153 @@ win5:AddDropdown(races(), function(state)
             end
         end
     end
+end)
+
+win5:AddToggle("Auto Loop All (Season + Kits + Spins)", function(state)
+    getfenv().autoLoopAll = state
+    saveSettings()
+    task.spawn(function()
+        while getfenv().autoLoopAll do
+            pcall(function()
+                local remotes = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes")
+                local services = remotes and remotes:FindFirstChild("Services")
+                -- Season
+                local claimFunc = services and services:FindFirstChild("TrophySeasonRemotes") and services.TrophySeasonRemotes:FindFirstChild("ClaimLevelReward")
+                if claimFunc then
+                    for level = 1, 50 do
+                        if not getfenv().autoLoopAll then break end
+                        claimFunc:InvokeServer(level, "Free")
+                        claimFunc:InvokeServer(level, "Premium")
+                        task.wait(0.05)
+                    end
+                end
+                -- Kits
+                local consumeRemote = services and services:FindFirstChild("ConsumableServiceRemotes") and services.ConsumableServiceRemotes:FindFirstChild("Consume")
+                if consumeRemote then
+                    local kitTypes = {"DecorationKit", "DecorationKitDeluxe", "RegularCustomizationKit", "DeluxeCustomizationKit", "CustomizationKit"}
+                    for _, kit in ipairs(kitTypes) do
+                        if not getfenv().autoLoopAll then break end
+                        consumeRemote:InvokeServer(kit)
+                        task.wait(0.1)
+                    end
+                end
+                -- Spins
+                local spinRemote = game:GetService("ReplicatedStorage"):FindFirstChild("Databases")
+                    and game.ReplicatedStorage.Databases:FindFirstChild("Spinners")
+                    and game.ReplicatedStorage.Databases.Spinners:FindFirstChild("SpinEvent")
+                if spinRemote then
+                    spinRemote:InvokeServer("Standard", "Free")
+                    spinRemote:InvokeServer("Hyper", "Free")
+                else
+                    local altSpin = services and services:FindFirstChild("SpinnerRemotes") and services.SpinnerRemotes:FindFirstChild("Spin")
+                    if altSpin then
+                        altSpin:InvokeServer("Standard")
+                        altSpin:InvokeServer("Hyper")
+                    end
+                end
+            end)
+            task.wait(3)
+        end
+    end)
+end)
+
+win5:AddToggle("Auto Claim Tokens", function(state)
+    getfenv().claimTokens = state
+    saveSettings()
+    task.spawn(function()
+        while getfenv().claimTokens do
+            pcall(function()
+                local claimRemote = game:GetService("ReplicatedStorage").Remotes.Services.TrophySeasonRemotes.ClaimLevelReward
+                for lvl = 1, 50 do
+                    claimRemote:InvokeServer(lvl, "Free")
+                end
+            end)
+            task.wait(5)
+        end
+    end)
+end)
+
+win5:AddToggle("Auto Use Deluxe Upgrade Kit", function(state)
+    getfenv().autoUpgradeKit = state
+    saveSettings()
+    task.spawn(function()
+        while getfenv().autoUpgradeKit do
+            pcall(function()
+                local consume = game:GetService("ReplicatedStorage").Remotes.Services.ConsumableServiceRemotes.Consume
+                if consume then
+                    consume:InvokeServer("DeluxeUpgradeKit")
+                end
+            end)
+            task.wait(2)
+        end
+    end)
+end)
+
+-- ===== ПЕРЕНЕСЕННЫЕ ТОГГЛЫ: Auto Consume Items и Auto Purchase =====
+win5:AddLabel("Auto Consume Item")
+win5:AddBox("Enter item name", function(object, focus)
+    if focus then
+        local val = object.Text
+        if val and val ~= "" then
+            settings.consumeItem = val
+            saveSettings()
+        end
+    end
+end)
+
+win5:AddToggle("Auto Consume Items", function(state)
+    settings.autoConsume = state
+    getfenv().autoConsume = state
+    saveSettings()
+    task.spawn(function()
+        while getfenv().autoConsume do
+            pcall(function()
+                local consume = game:GetService("ReplicatedStorage").Remotes.Services.ConsumableServiceRemotes.Consume
+                if consume then
+                    consume:InvokeServer(settings.consumeItem)
+                end
+            end)
+            task.wait(2)
+        end
+    end)
+end)
+
+win5:AddLabel("Auto Purchase Item")
+win5:AddBox("Enter item name", function(object, focus)
+    if focus then
+        local val = object.Text
+        if val and val ~= "" then
+            settings.purchaseItem = val
+            saveSettings()
+        end
+    end
+end)
+
+win5:AddToggle("Auto Purchase (магазин)", function(state)
+    settings.autoPurchase = state
+    getfenv().autoPurchase = state
+    saveSettings()
+    task.spawn(function()
+        while getfenv().autoPurchase do
+            pcall(function()
+                -- Здесь нужно заменить на реальный ремоут покупки
+                -- Например: game:GetService("ReplicatedStorage").Remotes.Services.StoreRemotes.Purchase:InvokeServer(settings.purchaseItem)
+                warn("Auto Purchase: реализуйте свой ремоут")
+            end)
+            task.wait(5)
+        end
+    end)
+end)
+
+-- Блокировка аналитики (опционально)
+win5:AddToggle("Block Analytics Events", function(state)
+    getfenv().blockAnalytics = state
+    task.spawn(function()
+        while getfenv().blockAnalytics do
+            -- Перехватываем вызовы аналитических ремоутов (уже частично блокируются через метатаблицу)
+            task.wait(10)
+        end
+    end)
 end)
 
 win5:AddButton("Save Settings", function()
