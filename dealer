@@ -1,10 +1,10 @@
 -- ============================================================
---           ОБЪЕДИНЁННЫЙ СКРИПТ ДЛЯ VEHICLE DEALERSHIP
---   Версия: 5.1 (используется оригинальная UI библиотека)
---   Все функции из предоставленных файлов + улучшения
+--           ФИНАЛЬНЫЙ СКРИПТ (ВЕРСИЯ С БИБЛИОТЕКОЙ)
+--   Все функции + исправления, сохранение настроек.
+--   Исправлены пути для спинов, добавлены безопасные задержки.
 -- ============================================================
 
--- ========== СЛУЖЕБНЫЕ ФУНКЦИИ ==========
+-- ==================== СЛУЖЕБНЫЕ ФУНКЦИИ ====================
 
 local function races()
     local tab = {"None"}
@@ -18,7 +18,8 @@ local function races()
     return tab
 end
 
--- ========== АНТИ-АФК ==========
+-- ==================== АНТИ-АФК ====================
+
 local vu = game:GetService("VirtualUser")
 game:GetService("Players").LocalPlayer.Idled:Connect(function()
     vu:Button2Down(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
@@ -26,7 +27,8 @@ game:GetService("Players").LocalPlayer.Idled:Connect(function()
     vu:Button2Up(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
 end)
 
--- ========== ПЕРЕХВАТ МЕТОДОВ (HOOKING) ==========
+-- ==================== ПЕРЕХВАТ МЕТОДОВ (Hooking) ====================
+
 local mt = getrawmetatable(game)
 setreadonly(mt, false)
 local oldNamecall = mt.__namecall
@@ -63,14 +65,16 @@ getfenv().grav = workspace.Gravity
 getfenv().speed = 300
 getfenv().raceSpeed = 200
 
--- ========== ЗАГРУЗКА БИБЛИОТЕКИ UI ==========
+-- ==================== ЗАГРУЗКА БИБЛИОТЕКИ UI ====================
+
 local library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Marco8642/science/main/ui%20libs2", true))()
 if not library then
     warn("Не удалось загрузить библиотеку UI")
     return
 end
 
--- ========== ГЛОБАЛЬНЫЕ НАСТРОЙКИ ==========
+-- ==================== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ НАСТРОЕК ====================
+
 local settings = {
     -- Main
     driveSpeed = 300,
@@ -102,8 +106,9 @@ local settings = {
     autoFreeGifts = false,
     autoSpinStandard = false,
     autoSpinHyper = false,
-    spinCount = 10,
-    spinDelay = 0.05,
+    spinCount = 5,
+    spinDelay = 1.5,
+    cyclePause = 5,
     autoOpenKits = false,
     kitCount = 1,
     autoOpenAllKits = false,
@@ -120,7 +125,7 @@ local settings = {
     purchaseItem = "SomeItem",
 }
 
--- Загрузка / сохранение
+-- Загрузка сохранений
 local function loadSettings()
     if pcall(function() return readfile("VD_settings.json") end) then
         local data = game:GetService("HttpService"):JSONDecode(readfile("VD_settings.json"))
@@ -140,17 +145,8 @@ local function saveSettings()
     writefile("VD_settings.json", json)
 end
 
--- Установка начальных значений
-getfenv().speed = settings.driveSpeed
-getfenv().raceSpeed = settings.raceSpeed
-getfenv().stars = settings.deliveryStars
-getfenv().smaller = settings.deliveryMinMoney
-getfenv().bigger = settings.deliveryMaxMoney
-getfenv().grav = workspace.Gravity
+-- ==================== ОКНО 1: Vehicle Dealership ====================
 
--- ========== СОЗДАНИЕ ОКОН ==========
-
--- ОКНО 1: Vehicle Dealership
 local win1 = library:CreateWindow({ text = "Vehicle Dealership" })
 
 win1:AddBox("Auto Drive Speed (max 2000)", function(object, focus)
@@ -492,7 +488,8 @@ win1:AddToggle("Annoying Popup Disabler", function(state)
     end
 end)
 
--- ========== ОКНО 2: Delivery Options ==========
+-- ==================== ОКНО 2: Delivery Options ====================
+
 local win2 = library:CreateWindow({ text = "Delivery Options" })
 
 win2:AddLabel("Minimum Stars")
@@ -706,7 +703,8 @@ win2:AddToggle("Auto Delivery (продвинутая)", function(state)
     end
 end)
 
--- ========== ОКНО 3: Race ==========
+-- ==================== ОКНО 3: Race ====================
+
 local win3 = library:CreateWindow({ text = "Race" })
 
 win3:AddBox("Auto Race Speed", function(object, focus)
@@ -1163,7 +1161,8 @@ win3:AddToggle("AutoFarm [laps|checkpoints]", function(state)
     end
 end)
 
--- ========== ОКНО 4: Automation ==========
+-- ==================== ОКНО 4: Automation ====================
+
 local win4 = library:CreateWindow({ text = "Automation" })
 
 win4:AddLabel("Season Rewards: from level")
@@ -1245,8 +1244,9 @@ win4:AddToggle("Auto Claim Free Gifts (Store)", function(state)
     end)
 end)
 
+-- ========== ИСПРАВЛЕННЫЕ ТОГГЛЫ ДЛЯ СПИНОВ ==========
 win4:AddLabel("Spin Settings")
-win4:AddBox("Spin count per cycle (default 10)", function(object, focus)
+win4:AddBox("Spin count per cycle (default 5)", function(object, focus)
     if focus then
         local num = tonumber(object.Text)
         if num then
@@ -1255,7 +1255,7 @@ win4:AddBox("Spin count per cycle (default 10)", function(object, focus)
         end
     end
 end)
-win4:AddBox("Spin delay (seconds, default 0.05)", function(object, focus)
+win4:AddBox("Delay between spins (seconds, default 1.5)", function(object, focus)
     if focus then
         local num = tonumber(object.Text)
         if num then
@@ -1264,36 +1264,34 @@ win4:AddBox("Spin delay (seconds, default 0.05)", function(object, focus)
         end
     end
 end)
+win4:AddBox("Pause between cycles (seconds, default 5)", function(object, focus)
+    if focus then
+        local num = tonumber(object.Text)
+        if num then
+            settings.cyclePause = num
+            saveSettings()
+        end
+    end
+end)
+settings.cyclePause = 5
 
 win4:AddToggle("Auto Spin Standard (с количеством)", function(state)
     settings.autoSpinStandard = state
     getfenv().spinner = state
     saveSettings()
     task.spawn(function()
+        local spinRemote = game:GetService("ReplicatedStorage"):WaitForChild("Databases"):WaitForChild("Spinners"):WaitForChild("Spin")
         while getfenv().spinner do
-            local count = settings.spinCount or 10
-            local delay = settings.spinDelay or 0.05
+            local count = settings.spinCount or 5
+            local delay = settings.spinDelay or 1.5
             for i = 1, count do
                 if not getfenv().spinner then break end
                 pcall(function()
-                    local spinRemote = game:GetService("ReplicatedStorage"):FindFirstChild("Databases")
-                        and game.ReplicatedStorage.Databases:FindFirstChild("Spinners")
-                        and game.ReplicatedStorage.Databases.Spinners:FindFirstChild("SpinEvent")
-                    if spinRemote then
-                        spinRemote:InvokeServer("Standard", "Free")
-                    else
-                        local altSpin = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes")
-                            and game.ReplicatedStorage.Remotes:FindFirstChild("Services")
-                            and game.ReplicatedStorage.Remotes.Services:FindFirstChild("SpinnerRemotes")
-                            and game.ReplicatedStorage.Remotes.Services.SpinnerRemotes:FindFirstChild("Spin")
-                        if altSpin then
-                            altSpin:InvokeServer("Standard")
-                        end
-                    end
+                    spinRemote:InvokeServer("Standard", "Free")
                 end)
                 task.wait(delay)
             end
-            task.wait(1.5)
+            task.wait(settings.cyclePause or 5)
         end
     end)
 end)
@@ -1303,26 +1301,23 @@ win4:AddToggle("Auto Spin Hyper (с количеством)", function(state)
     getfenv().spinner1 = state
     saveSettings()
     task.spawn(function()
+        local spinRemote = game:GetService("ReplicatedStorage"):WaitForChild("Databases"):WaitForChild("Spinners"):WaitForChild("Spin")
         while getfenv().spinner1 do
-            local count = settings.spinCount or 10
-            local delay = settings.spinDelay or 0.05
+            local count = settings.spinCount or 5
+            local delay = settings.spinDelay or 1.5
             for i = 1, count do
                 if not getfenv().spinner1 then break end
                 pcall(function()
-                    local spinRemote = game:GetService("ReplicatedStorage"):FindFirstChild("Databases")
-                        and game.ReplicatedStorage.Databases:FindFirstChild("Spinners")
-                        and game.ReplicatedStorage.Databases.Spinners:FindFirstChild("SpinEvent")
-                    if spinRemote then
-                        spinRemote:InvokeServer("Hyper", "Free")
-                    end
+                    spinRemote:InvokeServer("Hyper", "Free")
                 end)
                 task.wait(delay)
             end
-            task.wait(1.5)
+            task.wait(settings.cyclePause or 5)
         end
     end)
 end)
 
+-- ========== ОСТАЛЬНЫЕ ТОГГЛЫ AUTOMATION ==========
 win4:AddLabel("Kits: количество за цикл")
 win4:AddBox("Enter count (default 1)", function(object, focus)
     if focus then
@@ -1488,61 +1483,8 @@ win4:AddToggle("Auto Claim Daily Streak", function(state)
     end)
 end)
 
-win4:AddLabel("Auto Consume Item")
-win4:AddBox("Enter item name", function(object, focus)
-    if focus then
-        local val = object.Text
-        if val and val ~= "" then
-            settings.consumeItem = val
-            saveSettings()
-        end
-    end
-end)
+-- ==================== ОКНО 5: Misc ====================
 
-win4:AddToggle("Auto Consume Items", function(state)
-    settings.autoConsume = state
-    getfenv().autoConsume = state
-    saveSettings()
-    task.spawn(function()
-        while getfenv().autoConsume do
-            pcall(function()
-                local consume = game:GetService("ReplicatedStorage").Remotes.Services.ConsumableServiceRemotes.Consume
-                if consume then
-                    consume:InvokeServer(settings.consumeItem)
-                end
-            end)
-            task.wait(2)
-        end
-    end)
-end)
-
-win4:AddLabel("Auto Purchase Item")
-win4:AddBox("Enter item name", function(object, focus)
-    if focus then
-        local val = object.Text
-        if val and val ~= "" then
-            settings.purchaseItem = val
-            saveSettings()
-        end
-    end
-end)
-
-win4:AddToggle("Auto Purchase (магазин)", function(state)
-    settings.autoPurchase = state
-    getfenv().autoPurchase = state
-    saveSettings()
-    task.spawn(function()
-        while getfenv().autoPurchase do
-            pcall(function()
-                -- Замените на реальный ремоут покупки
-                warn("Auto Purchase: реализуйте свой ремоут")
-            end)
-            task.wait(5)
-        end
-    end)
-end)
-
--- ========== ОКНО 5: Misc ==========
 local win5 = library:CreateWindow({ text = "Misc" })
 
 win5:AddButton("Force Load Map", function()
@@ -1615,34 +1557,20 @@ win5:AddToggle("Auto Loop All (Season + Kits + Spins)", function(state)
                         task.wait(0.1)
                     end
                 end
-                -- Spins (с количеством)
-                local spinRemote = game:GetService("ReplicatedStorage"):FindFirstChild("Databases")
-                    and game.ReplicatedStorage.Databases:FindFirstChild("Spinners")
-                    and game.ReplicatedStorage.Databases.Spinners:FindFirstChild("SpinEvent")
+                -- Spins (с количеством и задержкой)
+                local spinRemote = game:GetService("ReplicatedStorage"):WaitForChild("Databases"):WaitForChild("Spinners"):WaitForChild("Spin")
                 if spinRemote then
-                    local count = settings.spinCount or 10
-                    local delay = settings.spinDelay or 0.05
+                    local count = settings.spinCount or 5
+                    local delay = settings.spinDelay or 1.5
                     for i = 1, count do
                         if not getfenv().autoLoopAll then break end
                         spinRemote:InvokeServer("Standard", "Free")
                         spinRemote:InvokeServer("Hyper", "Free")
                         task.wait(delay)
                     end
-                else
-                    local altSpin = services and services:FindFirstChild("SpinnerRemotes") and services.SpinnerRemotes:FindFirstChild("Spin")
-                    if altSpin then
-                        local count = settings.spinCount or 10
-                        local delay = settings.spinDelay or 0.05
-                        for i = 1, count do
-                            if not getfenv().autoLoopAll then break end
-                            altSpin:InvokeServer("Standard")
-                            altSpin:InvokeServer("Hyper")
-                            task.wait(delay)
-                        end
-                    end
                 end
             end)
-            task.wait(3)
+            task.wait(settings.cyclePause or 5)
         end
     end)
 end)
@@ -1679,6 +1607,90 @@ win5:AddToggle("Auto Use Deluxe Upgrade Kit", function(state)
     end)
 end)
 
+-- ==== НОВЫЙ КОМБИНИРОВАННЫЙ ТОГГЛ ====
+win5:AddLabel("=== Авто-сбор подарков + спины ===")
+win5:AddToggle("Auto Collect Free Gifts & Spins", function(state)
+    getfenv().autoCollectAll = state
+    saveSettings()
+    task.spawn(function()
+        local spinRemote = game:GetService("ReplicatedStorage"):WaitForChild("Databases"):WaitForChild("Spinners"):WaitForChild("Spin")
+        while getfenv().autoCollectAll do
+            pcall(function()
+                -- 1. Забираем бесплатный подарок из магазина
+                local claimRemote = game:GetService("ReplicatedStorage"):FindFirstChild("Databases")
+                    and game.ReplicatedStorage.Databases:FindFirstChild("Store")
+                    and game.ReplicatedStorage.Databases.Store:FindFirstChild("Featured")
+                    and game.ReplicatedStorage.Databases.Store.Featured:FindFirstChild("ClaimFreeGift")
+                if claimRemote then
+                    claimRemote:InvokeServer()
+                end
+
+                -- 2. Крутим Standard и Hyper спины (по одному разу за цикл)
+                spinRemote:InvokeServer("Standard", "Free")
+                task.wait(settings.spinDelay or 1.5)
+                spinRemote:InvokeServer("Hyper", "Free")
+                task.wait(settings.spinDelay or 1.5)
+            end)
+            task.wait(settings.cyclePause or 5)
+        end
+    end)
+end)
+
+-- ==== ПЕРЕНЕСЁННЫЕ ТОГГЛЫ (Auto Consume и Auto Purchase) ====
+win5:AddLabel("Auto Consume Item")
+win5:AddBox("Enter item name", function(object, focus)
+    if focus then
+        local val = object.Text
+        if val and val ~= "" then
+            settings.consumeItem = val
+            saveSettings()
+        end
+    end
+end)
+
+win5:AddToggle("Auto Consume Items", function(state)
+    settings.autoConsume = state
+    getfenv().autoConsume = state
+    saveSettings()
+    task.spawn(function()
+        while getfenv().autoConsume do
+            pcall(function()
+                local consume = game:GetService("ReplicatedStorage").Remotes.Services.ConsumableServiceRemotes.Consume
+                if consume then
+                    consume:InvokeServer(settings.consumeItem)
+                end
+            end)
+            task.wait(2)
+        end
+    end)
+end)
+
+win5:AddLabel("Auto Purchase Item")
+win5:AddBox("Enter item name", function(object, focus)
+    if focus then
+        local val = object.Text
+        if val and val ~= "" then
+            settings.purchaseItem = val
+            saveSettings()
+        end
+    end
+end)
+
+win5:AddToggle("Auto Purchase (магазин)", function(state)
+    settings.autoPurchase = state
+    getfenv().autoPurchase = state
+    saveSettings()
+    task.spawn(function()
+        while getfenv().autoPurchase do
+            pcall(function()
+                -- Замените на реальный ремоут покупки
+                warn("Auto Purchase: реализуйте свой ремоут")
+            end)
+            task.wait(5)
+        end
+    end)
+end)
+
 win5:AddToggle("Block Analytics Events", function(state)
     getfenv().blockAnalytics = state
     task.spawn(function()
@@ -1698,4 +1710,13 @@ win5:AddButton("Load Settings", function()
     print("Settings loaded!")
 end)
 
-print("✅ Скрипт успешно загружен! Все окна открыты.")
+-- ==================== УСТАНОВКА НАЧАЛЬНЫХ ЗНАЧЕНИЙ ====================
+
+getfenv().speed = settings.driveSpeed
+getfenv().raceSpeed = settings.raceSpeed
+getfenv().stars = settings.deliveryStars
+getfenv().smaller = settings.deliveryMinMoney
+getfenv().bigger = settings.deliveryMaxMoney
+getfenv().grav = workspace.Gravity
+
+print("✅ Скрипт успешно загружен (с внешней библиотекой)!")
