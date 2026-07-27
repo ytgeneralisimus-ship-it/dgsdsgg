@@ -1,8 +1,8 @@
 -- ============================================================
 --           ФИНАЛЬНЫЙ СКРИПТ (ВЕРСИЯ С БИБЛИОТЕКОЙ)
 --   Все функции + исправления, сохранение настроек.
---   Используется внешняя UI библиотека (с прокруткой).
---   Авто-консум и авто-покупка перенесены в раздел Misc.
+--   Добавлены настройки количества спинов.
+--   Используется внешняя UI библиотека (без кастомного кода).
 -- ============================================================
 
 -- ==================== СЛУЖЕБНЫЕ ФУНКЦИИ ====================
@@ -100,13 +100,14 @@ local settings = {
     autoDriftRace = false,
     autoFarmLaps = false,
 
-    -- Automation (часть функций перенесена в Misc)
+    -- Automation
     autoSeason = false,
     seasonFrom = 1,
     seasonTo = 50,
     autoFreeGifts = false,
     autoSpinStandard = false,
     autoSpinHyper = false,
+    spinCount = 1,          -- <-- НОВОЕ: количество спинов за цикл
     autoOpenKits = false,
     kitCount = 1,
     autoOpenAllKits = false,
@@ -720,7 +721,7 @@ win3:AddToggle("Auto Race (Standard)", function(state)
     settings.autoRace = state
     _G.racetest = state
     saveSettings()
-    -- Полный код стандартной гонки из оригинального скрипта
+    -- Полный код стандартной гонки (из оригинального скрипта)
     workspace.Gravity = 196
     local race = nil
     local distance = math.huge
@@ -1160,7 +1161,7 @@ win3:AddToggle("AutoFarm [laps|checkpoints]", function(state)
     end
 end)
 
--- ==================== ОКНО 4: Automation (часть функций перенесена в Misc) ====================
+-- ==================== ОКНО 4: Automation ====================
 
 local win4 = library:CreateWindow({ text = "Automation" })
 
@@ -1243,52 +1244,75 @@ win4:AddToggle("Auto Claim Free Gifts (Store)", function(state)
     end)
 end)
 
-win4:AddToggle("Auto Spin Standard (исправленный)", function(state)
+-- ========== НОВЫЕ ТОГГЛЫ ДЛЯ СПИНОВ С КОЛИЧЕСТВОМ ==========
+win4:AddLabel("Spin Settings")
+win4:AddBox("Spin count per cycle (default 1)", function(object, focus)
+    if focus then
+        local num = tonumber(object.Text)
+        if num then
+            settings.spinCount = num
+            saveSettings()
+        end
+    end
+end)
+
+win4:AddToggle("Auto Spin Standard (с количеством)", function(state)
     settings.autoSpinStandard = state
     getfenv().spinner = state
     saveSettings()
     task.spawn(function()
         while getfenv().spinner do
-            pcall(function()
-                local spinRemote = game:GetService("ReplicatedStorage"):FindFirstChild("Databases")
-                    and game.ReplicatedStorage.Databases:FindFirstChild("Spinners")
-                    and game.ReplicatedStorage.Databases.Spinners:FindFirstChild("SpinEvent")
-                if spinRemote then
-                    spinRemote:InvokeServer("Standard", "Free")
-                else
-                    local altSpin = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes")
-                        and game.ReplicatedStorage.Remotes:FindFirstChild("Services")
-                        and game.ReplicatedStorage.Remotes.Services:FindFirstChild("SpinnerRemotes")
-                        and game.ReplicatedStorage.Remotes.Services.SpinnerRemotes:FindFirstChild("Spin")
-                    if altSpin then
-                        altSpin:InvokeServer("Standard")
+            local count = settings.spinCount or 1
+            for i = 1, count do
+                if not getfenv().spinner then break end
+                pcall(function()
+                    local spinRemote = game:GetService("ReplicatedStorage"):FindFirstChild("Databases")
+                        and game.ReplicatedStorage.Databases:FindFirstChild("Spinners")
+                        and game.ReplicatedStorage.Databases.Spinners:FindFirstChild("SpinEvent")
+                    if spinRemote then
+                        spinRemote:InvokeServer("Standard", "Free")
+                    else
+                        local altSpin = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes")
+                            and game.ReplicatedStorage.Remotes:FindFirstChild("Services")
+                            and game.ReplicatedStorage.Remotes.Services:FindFirstChild("SpinnerRemotes")
+                            and game.ReplicatedStorage.Remotes.Services.SpinnerRemotes:FindFirstChild("Spin")
+                        if altSpin then
+                            altSpin:InvokeServer("Standard")
+                        end
                     end
-                end
-            end)
+                end)
+                task.wait(0.3)
+            end
             task.wait(1.5)
         end
     end)
 end)
 
-win4:AddToggle("Auto Spin Hyper (исправленный)", function(state)
+win4:AddToggle("Auto Spin Hyper (с количеством)", function(state)
     settings.autoSpinHyper = state
     getfenv().spinner1 = state
     saveSettings()
     task.spawn(function()
         while getfenv().spinner1 do
-            pcall(function()
-                local spinRemote = game:GetService("ReplicatedStorage"):FindFirstChild("Databases")
-                    and game.ReplicatedStorage.Databases:FindFirstChild("Spinners")
-                    and game.ReplicatedStorage.Databases.Spinners:FindFirstChild("SpinEvent")
-                if spinRemote then
-                    spinRemote:InvokeServer("Hyper", "Free")
-                end
-            end)
+            local count = settings.spinCount or 1
+            for i = 1, count do
+                if not getfenv().spinner1 then break end
+                pcall(function()
+                    local spinRemote = game:GetService("ReplicatedStorage"):FindFirstChild("Databases")
+                        and game.ReplicatedStorage.Databases:FindFirstChild("Spinners")
+                        and game.ReplicatedStorage.Databases.Spinners:FindFirstChild("SpinEvent")
+                    if spinRemote then
+                        spinRemote:InvokeServer("Hyper", "Free")
+                    end
+                end)
+                task.wait(0.3)
+            end
             task.wait(1.5)
         end
     end)
 end)
 
+-- ========== ОСТАЛЬНЫЕ ТОГГЛЫ AUTOMATION ==========
 win4:AddLabel("Kits: количество за цикл")
 win4:AddBox("Enter count (default 1)", function(object, focus)
     if focus then
@@ -1454,9 +1478,6 @@ win4:AddToggle("Auto Claim Daily Streak", function(state)
     end)
 end)
 
--- Перенесённые из Automation в Misc:
--- Auto Consume Items и Auto Purchase теперь находятся в окне Misc (win5)
-
 -- ==================== ОКНО 5: Misc ====================
 
 local win5 = library:CreateWindow({ text = "Misc" })
@@ -1516,28 +1537,43 @@ win5:AddToggle("Auto Loop All (Season + Kits + Spins)", function(state)
                         task.wait(0.05)
                     end
                 end
-                -- Kits
+                -- Kits (с количеством)
                 local consumeRemote = services and services:FindFirstChild("ConsumableServiceRemotes") and services.ConsumableServiceRemotes:FindFirstChild("Consume")
                 if consumeRemote then
-                    local kitTypes = {"DecorationKit", "DecorationKitDeluxe", "RegularCustomizationKit", "DeluxeCustomizationKit", "CustomizationKit"}
-                    for _, kit in ipairs(kitTypes) do
+                    local count = settings.kitCount or 1
+                    for i = 1, count do
                         if not getfenv().autoLoopAll then break end
-                        consumeRemote:InvokeServer(kit)
+                        local kitTypes = {"DecorationKit", "DecorationKitDeluxe", "RegularCustomizationKit", "DeluxeCustomizationKit", "CustomizationKit"}
+                        for _, kit in ipairs(kitTypes) do
+                            if not getfenv().autoLoopAll then break end
+                            consumeRemote:InvokeServer(kit)
+                            task.wait(0.05)
+                        end
                         task.wait(0.1)
                     end
                 end
-                -- Spins
+                -- Spins (с количеством)
                 local spinRemote = game:GetService("ReplicatedStorage"):FindFirstChild("Databases")
                     and game.ReplicatedStorage.Databases:FindFirstChild("Spinners")
                     and game.ReplicatedStorage.Databases.Spinners:FindFirstChild("SpinEvent")
                 if spinRemote then
-                    spinRemote:InvokeServer("Standard", "Free")
-                    spinRemote:InvokeServer("Hyper", "Free")
+                    local count = settings.spinCount or 1
+                    for i = 1, count do
+                        if not getfenv().autoLoopAll then break end
+                        spinRemote:InvokeServer("Standard", "Free")
+                        spinRemote:InvokeServer("Hyper", "Free")
+                        task.wait(0.3)
+                    end
                 else
                     local altSpin = services and services:FindFirstChild("SpinnerRemotes") and services.SpinnerRemotes:FindFirstChild("Spin")
                     if altSpin then
-                        altSpin:InvokeServer("Standard")
-                        altSpin:InvokeServer("Hyper")
+                        local count = settings.spinCount or 1
+                        for i = 1, count do
+                            if not getfenv().autoLoopAll then break end
+                            altSpin:InvokeServer("Standard")
+                            altSpin:InvokeServer("Hyper")
+                            task.wait(0.3)
+                        end
                     end
                 end
             end)
@@ -1578,7 +1614,7 @@ win5:AddToggle("Auto Use Deluxe Upgrade Kit", function(state)
     end)
 end)
 
--- ===== ПЕРЕНЕСЕННЫЕ ТОГГЛЫ: Auto Consume Items и Auto Purchase =====
+-- ==== ПЕРЕНЕСЁННЫЕ ТОГГЛЫ (Auto Consume и Auto Purchase) ====
 win5:AddLabel("Auto Consume Item")
 win5:AddBox("Enter item name", function(object, focus)
     if focus then
@@ -1625,8 +1661,7 @@ win5:AddToggle("Auto Purchase (магазин)", function(state)
     task.spawn(function()
         while getfenv().autoPurchase do
             pcall(function()
-                -- Здесь нужно заменить на реальный ремоут покупки
-                -- Например: game:GetService("ReplicatedStorage").Remotes.Services.StoreRemotes.Purchase:InvokeServer(settings.purchaseItem)
+                -- Замените на реальный ремоут покупки
                 warn("Auto Purchase: реализуйте свой ремоут")
             end)
             task.wait(5)
@@ -1634,12 +1669,10 @@ win5:AddToggle("Auto Purchase (магазин)", function(state)
     end)
 end)
 
--- Блокировка аналитики (опционально)
 win5:AddToggle("Block Analytics Events", function(state)
     getfenv().blockAnalytics = state
     task.spawn(function()
         while getfenv().blockAnalytics do
-            -- Перехватываем вызовы аналитических ремоутов (уже частично блокируются через метатаблицу)
             task.wait(10)
         end
     end)
