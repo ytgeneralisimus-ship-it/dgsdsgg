@@ -1,8 +1,8 @@
 -- ============================================================
 --           ФИНАЛЬНЫЙ СКРИПТ (ВЕРСИЯ С БИБЛИОТЕКОЙ)
 --   Все функции + исправления, сохранение настроек.
---   Добавлены настройки количества спинов.
---   Используется внешняя UI библиотека (без кастомного кода).
+--   Добавлены настройки количества спинов и задержки.
+--   Используется внешняя UI библиотека.
 -- ============================================================
 
 -- ==================== СЛУЖЕБНЫЕ ФУНКЦИИ ====================
@@ -107,7 +107,8 @@ local settings = {
     autoFreeGifts = false,
     autoSpinStandard = false,
     autoSpinHyper = false,
-    spinCount = 1,          -- <-- НОВОЕ: количество спинов за цикл
+    spinCount = 10,           -- количество спинов за цикл
+    spinDelay = 0.05,         -- задержка между спинами (сек) — можно поставить 0.01 для максимальной скорости
     autoOpenKits = false,
     kitCount = 1,
     autoOpenAllKits = false,
@@ -1244,13 +1245,22 @@ win4:AddToggle("Auto Claim Free Gifts (Store)", function(state)
     end)
 end)
 
--- ========== НОВЫЕ ТОГГЛЫ ДЛЯ СПИНОВ С КОЛИЧЕСТВОМ ==========
+-- ========== НОВЫЕ ТОГГЛЫ ДЛЯ СПИНОВ С КОЛИЧЕСТВОМ И ЗАДЕРЖКОЙ ==========
 win4:AddLabel("Spin Settings")
-win4:AddBox("Spin count per cycle (default 1)", function(object, focus)
+win4:AddBox("Spin count per cycle (default 10)", function(object, focus)
     if focus then
         local num = tonumber(object.Text)
         if num then
             settings.spinCount = num
+            saveSettings()
+        end
+    end
+end)
+win4:AddBox("Spin delay (seconds, default 0.05)", function(object, focus)
+    if focus then
+        local num = tonumber(object.Text)
+        if num then
+            settings.spinDelay = num
             saveSettings()
         end
     end
@@ -1262,7 +1272,8 @@ win4:AddToggle("Auto Spin Standard (с количеством)", function(state)
     saveSettings()
     task.spawn(function()
         while getfenv().spinner do
-            local count = settings.spinCount or 1
+            local count = settings.spinCount or 10
+            local delay = settings.spinDelay or 0.05
             for i = 1, count do
                 if not getfenv().spinner then break end
                 pcall(function()
@@ -1281,9 +1292,9 @@ win4:AddToggle("Auto Spin Standard (с количеством)", function(state)
                         end
                     end
                 end)
-                task.wait(0.3)
+                task.wait(delay) -- задержка между спинами
             end
-            task.wait(1.5)
+            task.wait(1.5) -- пауза между циклами
         end
     end)
 end)
@@ -1294,7 +1305,8 @@ win4:AddToggle("Auto Spin Hyper (с количеством)", function(state)
     saveSettings()
     task.spawn(function()
         while getfenv().spinner1 do
-            local count = settings.spinCount or 1
+            local count = settings.spinCount or 10
+            local delay = settings.spinDelay or 0.05
             for i = 1, count do
                 if not getfenv().spinner1 then break end
                 pcall(function()
@@ -1305,7 +1317,7 @@ win4:AddToggle("Auto Spin Hyper (с количеством)", function(state)
                         spinRemote:InvokeServer("Hyper", "Free")
                     end
                 end)
-                task.wait(0.3)
+                task.wait(delay)
             end
             task.wait(1.5)
         end
@@ -1552,27 +1564,29 @@ win5:AddToggle("Auto Loop All (Season + Kits + Spins)", function(state)
                         task.wait(0.1)
                     end
                 end
-                -- Spins (с количеством)
+                -- Spins (с количеством и задержкой)
                 local spinRemote = game:GetService("ReplicatedStorage"):FindFirstChild("Databases")
                     and game.ReplicatedStorage.Databases:FindFirstChild("Spinners")
                     and game.ReplicatedStorage.Databases.Spinners:FindFirstChild("SpinEvent")
                 if spinRemote then
-                    local count = settings.spinCount or 1
+                    local count = settings.spinCount or 10
+                    local delay = settings.spinDelay or 0.05
                     for i = 1, count do
                         if not getfenv().autoLoopAll then break end
                         spinRemote:InvokeServer("Standard", "Free")
                         spinRemote:InvokeServer("Hyper", "Free")
-                        task.wait(0.3)
+                        task.wait(delay)
                     end
                 else
                     local altSpin = services and services:FindFirstChild("SpinnerRemotes") and services.SpinnerRemotes:FindFirstChild("Spin")
                     if altSpin then
-                        local count = settings.spinCount or 1
+                        local count = settings.spinCount or 10
+                        local delay = settings.spinDelay or 0.05
                         for i = 1, count do
                             if not getfenv().autoLoopAll then break end
                             altSpin:InvokeServer("Standard")
                             altSpin:InvokeServer("Hyper")
-                            task.wait(0.3)
+                            task.wait(delay)
                         end
                     end
                 end
