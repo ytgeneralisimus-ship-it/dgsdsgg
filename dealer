@@ -1,8 +1,8 @@
 -- ============================================================
---           ФИНАЛЬНЫЙ СКРИПТ ДЛЯ VEHICLE DEALERSHIP
---   Все функции + исправления, сохранение настроек.
---   Исправлены: размер платформы для Auto Farm, AutoFarm laps.
---   Используется внешняя UI библиотека.
+--           ФИНАЛЬНЫЙ ОБЪЕДИНЁННЫЙ СКРИПТ
+--   Vehicle Dealership – все функции + AI Assistant
+--   Версия: 6.0 (на базе d25c62 + дополнения)
+--   Используется внешняя UI библиотека (Marco8642)
 -- ============================================================
 
 -- ==================== СЛУЖЕБНЫЕ ФУНКЦИИ ====================
@@ -107,9 +107,7 @@ local settings = {
     autoFreeGifts = false,
     autoSpinStandard = false,
     autoSpinHyper = false,
-    spinCount = 5,
-    spinDelay = 1.5,
-    cyclePause = 5,
+    spinCount = 1,
     autoOpenKits = false,
     kitCount = 1,
     autoOpenAllKits = false,
@@ -124,6 +122,15 @@ local settings = {
     consumeItem = "SpinTicket",
     autoPurchase = false,
     purchaseItem = "SomeItem",
+
+    -- НОВОЕ: Auto Purchase Spins (Free Dup)
+    autoPurchaseSpins = false,
+    purchaseSpinsType = "Standard",
+    purchaseSpinsAmount = 1,
+
+    -- AI Assistant
+    aiApiKey = "",
+    aiModel = "gpt-3.5-turbo",
 }
 
 -- Загрузка сохранений
@@ -177,20 +184,15 @@ win1:AddToggle("Auto Farm (езда)", function(state)
                         if not workspace:FindFirstChild("justapart") then
                             local new = Instance.new("Part", workspace)
                             new.Name = "justapart"
-                            -- Динамический размер в зависимости от скорости
-                            local speed = getfenv().speed or 300
-                            local baseSize = 10000
-                            local sizeMultiplier = math.max(1, speed / 300)
-                            local size = baseSize * sizeMultiplier
-                            new.Size = Vector3.new(size, 20, size)
+                            new.Size = Vector3.new(20000, 20, 20000)
                             new.Anchored = true
                             new.Position = chr.HumanoidRootPart.Position + Vector3.new(0, 1000, 0)
                         end
-                        local speed = getfenv().speed or 300
-                        if speed > 2000 then speed = 2000 end
                         car:PivotTo(workspace.justapart.CFrame * CFrame.new(0, 10, 1000))
                         local pos = workspace.justapart.CFrame * CFrame.new(0, 10, -1000)
                         local dist = (car.PrimaryPart.Position - pos.Position).Magnitude
+                        local speed = getfenv().speed or 300
+                        if speed > 2000 then speed = 2000 end
                         car.PrimaryPart.AssemblyLinearVelocity = car.PrimaryPart.CFrame.LookVector * speed
                         local TweenService = game:GetService("TweenService")
                         local TweenInfoToUse = TweenInfo.new(dist/speed, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut, 0, true, 0)
@@ -728,6 +730,7 @@ win3:AddToggle("Auto Race (Standard)", function(state)
     settings.autoRace = state
     _G.racetest = state
     saveSettings()
+    -- Полный код стандартной гонки (из оригинального скрипта)
     workspace.Gravity = 196
     local race = nil
     local distance = math.huge
@@ -1110,7 +1113,6 @@ win3:AddToggle("Auto Drift Race", function(state)
     end
 end)
 
--- ========== ИСПРАВЛЕННЫЙ AutoFarm [laps|checkpoints] ==========
 win3:AddToggle("AutoFarm [laps|checkpoints]", function(state)
     settings.autoFarmLaps = state
     _G.racetest = state
@@ -1127,51 +1129,15 @@ win3:AddToggle("AutoFarm [laps|checkpoints]", function(state)
             end
         end
     end
-    if not race then return end
     local tpto = race and race.CFrame or CFrame.new()
     _G.remotetable1 = nil
     _G.remotetable2 = nil
     _G.remotetable3 = nil
-
-    -- Поиск ремоута Checkpoint и значения Laps
-    local checkpointRemote = nil
-    local lapsValue = 1
-    local raceParent = race.Parent
-    if raceParent then
-        -- Ищем скрипт, который содержит Checkpoint и Laps
-        local script = raceParent:FindFirstChild("Script")
-        if script then
-            local checkpoint = script:FindFirstChild("Checkpoint")
-            if checkpoint and checkpoint:IsA("RemoteEvent") then
-                checkpointRemote = checkpoint
-            end
-            local laps = script:FindFirstChild("Laps")
-            if laps and laps:IsA("NumberValue") then
-                lapsValue = laps.Value
-            end
-        end
-        -- Если не нашли, попробуем другие варианты
-        if not checkpointRemote then
-            -- Поиск по всем потомкам
-            for _, obj in pairs(raceParent:GetDescendants()) do
-                if obj.Name == "Checkpoint" and obj:IsA("RemoteEvent") then
-                    checkpointRemote = obj
-                    break
-                end
-            end
-        end
-        if not checkpointRemote then
-            warn("Checkpoint remote не найден, AutoFarm laps не будет работать")
-            return
-        end
-    end
-
     while _G.racetest do
         pcall(function()
             task.wait()
             local chr = game.Players.LocalPlayer.Character
             if not chr or not chr:FindFirstChild("Humanoid") then return end
-
             if game:GetService("Players").LocalPlayer.PlayerGui.Menu.Race.Visible == false and _G.remotetable1 ~= nil then
                 getfenv().firsttime = true
                 if chr.Humanoid.SeatPart then
@@ -1195,12 +1161,9 @@ win3:AddToggle("AutoFarm [laps|checkpoints]", function(state)
                     repeat task.wait() until game:GetService("Players").LocalPlayer.PlayerGui.Menu.Race.Visible == true or not _G.racetest
                 end
             elseif game:GetService("Players").LocalPlayer.PlayerGui.Menu.Race.Visible == true then
-                local checkpoints = raceParent:FindFirstChild("Checkpoints")
-                if not checkpoints then return end
-                local count = #checkpoints:GetChildren()
-                for i = 1, count * lapsValue do
-                    if not _G.racetest then break end
-                    checkpointRemote:FireServer(i)
+                local count = #race.Parent.Checkpoints:GetChildren()
+                for i = 1, count * race.Parent.Script:FindFirstChild("Laps").Value do
+                    race.Parent.Script.Checkpoint:FireServer(i)
                 end
             end
         end)
@@ -1290,31 +1253,13 @@ win4:AddToggle("Auto Claim Free Gifts (Store)", function(state)
     end)
 end)
 
--- ========== ИСПРАВЛЕННЫЕ ТОГГЛЫ ДЛЯ СПИНОВ ==========
-win4:AddLabel("Spin Settings")
-win4:AddBox("Spin count per cycle (default 5)", function(object, focus)
+-- ========== ТОГГЛЫ ДЛЯ СПИНОВ (SpinEvent) ==========
+win4:AddLabel("Spin Settings (SpinEvent)")
+win4:AddBox("Spin count per cycle (default 1)", function(object, focus)
     if focus then
         local num = tonumber(object.Text)
         if num then
             settings.spinCount = num
-            saveSettings()
-        end
-    end
-end)
-win4:AddBox("Delay between spins (seconds, default 1.5)", function(object, focus)
-    if focus then
-        local num = tonumber(object.Text)
-        if num then
-            settings.spinDelay = num
-            saveSettings()
-        end
-    end
-end)
-win4:AddBox("Pause between cycles (seconds, default 5)", function(object, focus)
-    if focus then
-        local num = tonumber(object.Text)
-        if num then
-            settings.cyclePause = num
             saveSettings()
         end
     end
@@ -1325,18 +1270,29 @@ win4:AddToggle("Auto Spin Standard (с количеством)", function(state)
     getfenv().spinner = state
     saveSettings()
     task.spawn(function()
-        local spinRemote = game:GetService("ReplicatedStorage"):WaitForChild("Databases"):WaitForChild("Spinners"):WaitForChild("Spin")
         while getfenv().spinner do
-            local count = settings.spinCount or 5
-            local delay = settings.spinDelay or 1.5
+            local count = settings.spinCount or 1
             for i = 1, count do
                 if not getfenv().spinner then break end
                 pcall(function()
-                    spinRemote:InvokeServer("Standard", "Free")
+                    local spinRemote = game:GetService("ReplicatedStorage"):FindFirstChild("Databases")
+                        and game.ReplicatedStorage.Databases:FindFirstChild("Spinners")
+                        and game.ReplicatedStorage.Databases.Spinners:FindFirstChild("SpinEvent")
+                    if spinRemote then
+                        spinRemote:InvokeServer("Standard", "Free")
+                    else
+                        local altSpin = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes")
+                            and game.ReplicatedStorage.Remotes:FindFirstChild("Services")
+                            and game.ReplicatedStorage.Remotes.Services:FindFirstChild("SpinnerRemotes")
+                            and game.ReplicatedStorage.Remotes.Services.SpinnerRemotes:FindFirstChild("Spin")
+                        if altSpin then
+                            altSpin:InvokeServer("Standard")
+                        end
+                    end
                 end)
-                task.wait(delay)
+                task.wait(0.3)
             end
-            task.wait(settings.cyclePause or 5)
+            task.wait(1.5)
         end
     end)
 end)
@@ -1346,18 +1302,65 @@ win4:AddToggle("Auto Spin Hyper (с количеством)", function(state)
     getfenv().spinner1 = state
     saveSettings()
     task.spawn(function()
-        local spinRemote = game:GetService("ReplicatedStorage"):WaitForChild("Databases"):WaitForChild("Spinners"):WaitForChild("Spin")
         while getfenv().spinner1 do
-            local count = settings.spinCount or 5
-            local delay = settings.spinDelay or 1.5
+            local count = settings.spinCount or 1
             for i = 1, count do
                 if not getfenv().spinner1 then break end
                 pcall(function()
-                    spinRemote:InvokeServer("Hyper", "Free")
+                    local spinRemote = game:GetService("ReplicatedStorage"):FindFirstChild("Databases")
+                        and game.ReplicatedStorage.Databases:FindFirstChild("Spinners")
+                        and game.ReplicatedStorage.Databases.Spinners:FindFirstChild("SpinEvent")
+                    if spinRemote then
+                        spinRemote:InvokeServer("Hyper", "Free")
+                    end
                 end)
-                task.wait(delay)
+                task.wait(0.3)
             end
-            task.wait(settings.cyclePause or 5)
+            task.wait(1.5)
+        end
+    end)
+end)
+
+-- ========== НОВЫЙ ТОГГЛ: Auto Purchase Spins (Free Dup) ==========
+win4:AddLabel("--- Auto Purchase Spins (Free Dup) ---")
+win4:AddLabel("Тип спина (например: Standard, Hyper, SpinPack)")
+win4:AddBox("Spin type", function(object, focus)
+    if focus then
+        local val = object.Text
+        if val and val ~= "" then
+            settings.purchaseSpinsType = val
+            saveSettings()
+        end
+    end
+end)
+win4:AddLabel("Количество за вызов (число)")
+win4:AddBox("Amount", function(object, focus)
+    if focus then
+        local num = tonumber(object.Text)
+        if num then
+            settings.purchaseSpinsAmount = num
+            saveSettings()
+        end
+    end
+end)
+
+win4:AddToggle("Auto Purchase Spins (Free Dup)", function(state)
+    settings.autoPurchaseSpins = state
+    getfenv().autoPurchaseSpins = state
+    saveSettings()
+    task.spawn(function()
+        while getfenv().autoPurchaseSpins do
+            pcall(function()
+                local spinner = game:GetService("ReplicatedStorage"):FindFirstChild("Databases")
+                    and game.ReplicatedStorage.Databases:FindFirstChild("Spinners")
+                    and game.ReplicatedStorage.Databases.Spinners:FindFirstChild("OnPurchaseSpins")
+                if spinner then
+                    spinner:FireServer(settings.purchaseSpinsType, settings.purchaseSpinsAmount)
+                else
+                    warn("OnPurchaseSpins не найден, возможно, путь отличается.")
+                end
+            end)
+            task.wait(1.5)
         end
     end)
 end)
@@ -1602,20 +1605,32 @@ win5:AddToggle("Auto Loop All (Season + Kits + Spins)", function(state)
                         task.wait(0.1)
                     end
                 end
-                -- Spins (с количеством и задержкой)
-                local spinRemote = game:GetService("ReplicatedStorage"):WaitForChild("Databases"):WaitForChild("Spinners"):WaitForChild("Spin")
+                -- Spins (SpinEvent) с количеством
+                local spinRemote = game:GetService("ReplicatedStorage"):FindFirstChild("Databases")
+                    and game.ReplicatedStorage.Databases:FindFirstChild("Spinners")
+                    and game.ReplicatedStorage.Databases.Spinners:FindFirstChild("SpinEvent")
                 if spinRemote then
-                    local count = settings.spinCount or 5
-                    local delay = settings.spinDelay or 1.5
+                    local count = settings.spinCount or 1
                     for i = 1, count do
                         if not getfenv().autoLoopAll then break end
                         spinRemote:InvokeServer("Standard", "Free")
                         spinRemote:InvokeServer("Hyper", "Free")
-                        task.wait(delay)
+                        task.wait(0.3)
+                    end
+                else
+                    local altSpin = services and services:FindFirstChild("SpinnerRemotes") and services.SpinnerRemotes:FindFirstChild("Spin")
+                    if altSpin then
+                        local count = settings.spinCount or 1
+                        for i = 1, count do
+                            if not getfenv().autoLoopAll then break end
+                            altSpin:InvokeServer("Standard")
+                            altSpin:InvokeServer("Hyper")
+                            task.wait(0.3)
+                        end
                     end
                 end
             end)
-            task.wait(settings.cyclePause or 5)
+            task.wait(3)
         end
     end)
 end)
@@ -1652,30 +1667,7 @@ win5:AddToggle("Auto Use Deluxe Upgrade Kit", function(state)
     end)
 end)
 
-win5:AddToggle("Auto Collect Free Gifts & Spins", function(state)
-    getfenv().autoCollectAll = state
-    saveSettings()
-    task.spawn(function()
-        local spinRemote = game:GetService("ReplicatedStorage"):WaitForChild("Databases"):WaitForChild("Spinners"):WaitForChild("Spin")
-        while getfenv().autoCollectAll do
-            pcall(function()
-                local claimRemote = game:GetService("ReplicatedStorage"):FindFirstChild("Databases")
-                    and game.ReplicatedStorage.Databases:FindFirstChild("Store")
-                    and game.ReplicatedStorage.Databases.Store:FindFirstChild("Featured")
-                    and game.ReplicatedStorage.Databases.Store.Featured:FindFirstChild("ClaimFreeGift")
-                if claimRemote then
-                    claimRemote:InvokeServer()
-                end
-                spinRemote:InvokeServer("Standard", "Free")
-                task.wait(settings.spinDelay or 1.5)
-                spinRemote:InvokeServer("Hyper", "Free")
-                task.wait(settings.spinDelay or 1.5)
-            end)
-            task.wait(settings.cyclePause or 5)
-        end
-    end)
-end)
-
+-- ==== ПЕРЕНЕСЁННЫЕ ТОГГЛЫ (Auto Consume и Auto Purchase) ====
 win5:AddLabel("Auto Consume Item")
 win5:AddBox("Enter item name", function(object, focus)
     if focus then
@@ -1739,6 +1731,264 @@ win5:AddToggle("Block Analytics Events", function(state)
     end)
 end)
 
+-- ==================== AI Assistant ====================
+win5:AddLabel("--- AI Assistant ---")
+win5:AddBox("OpenAI API Key", function(object, focus)
+    if focus then
+        settings.aiApiKey = object.Text
+        saveSettings()
+    end
+end)
+win5:AddBox("Model (default gpt-3.5-turbo)", function(object, focus)
+    if focus then
+        local val = object.Text
+        if val and val ~= "" then
+            settings.aiModel = val
+            saveSettings()
+        end
+    end
+end)
+
+win5:AddButton("Open AI Assistant", function()
+    -- Проверка наличия ключа
+    if settings.aiApiKey == "" then
+        warn("API ключ не задан")
+        return
+    end
+
+    -- Создаём новое окно
+    local aiGui = Instance.new("ScreenGui")
+    aiGui.Name = "AIAssistant"
+    aiGui.Parent = game:GetService("CoreGui")
+    aiGui.ResetOnSpawn = false
+
+    local frame = Instance.new("Frame")
+    frame.Parent = aiGui
+    frame.BackgroundColor3 = Color3.fromRGB(25, 25, 40)
+    frame.BorderSizePixel = 0
+    frame.Position = UDim2.new(0.25, 0, 0.15, 0)
+    frame.Size = UDim2.new(0, 500, 0, 400)
+    frame.Active = true
+    frame.Draggable = true
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 10)
+    corner.Parent = frame
+
+    local title = Instance.new("TextLabel")
+    title.Parent = frame
+    title.Size = UDim2.new(1, 0, 0, 30)
+    title.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+    title.Text = "AI Assistant"
+    title.TextColor3 = Color3.fromRGB(255,255,255)
+    title.TextSize = 18
+    title.Font = Enum.Font.SourceSansBold
+    title.BorderSizePixel = 0
+    local titleCorner = Instance.new("UICorner")
+    titleCorner.CornerRadius = UDim.new(0, 10)
+    titleCorner.Parent = title
+
+    local closeBtn = Instance.new("TextButton")
+    closeBtn.Parent = frame
+    closeBtn.Size = UDim2.new(0, 30, 0, 30)
+    closeBtn.Position = UDim2.new(1, -35, 0, 0)
+    closeBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
+    closeBtn.Text = "X"
+    closeBtn.TextColor3 = Color3.fromRGB(255,255,255)
+    closeBtn.TextSize = 16
+    closeBtn.Font = Enum.Font.SourceSansBold
+    closeBtn.BorderSizePixel = 0
+    local closeCorner = Instance.new("UICorner")
+    closeCorner.CornerRadius = UDim.new(0, 5)
+    closeCorner.Parent = closeBtn
+    closeBtn.MouseButton1Click:Connect(function()
+        aiGui:Destroy()
+    end)
+
+    local chatScroll = Instance.new("ScrollingFrame")
+    chatScroll.Parent = frame
+    chatScroll.Position = UDim2.new(0, 10, 0, 40)
+    chatScroll.Size = UDim2.new(1, -20, 1, -90)
+    chatScroll.BackgroundTransparency = 1
+    chatScroll.ScrollBarThickness = 4
+
+    local chatLayout = Instance.new("UIListLayout")
+    chatLayout.Parent = chatScroll
+    chatLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    chatLayout.Padding = UDim.new(0, 5)
+
+    local inputBox = Instance.new("TextBox")
+    inputBox.Parent = frame
+    inputBox.Size = UDim2.new(1, -80, 0, 35)
+    inputBox.Position = UDim2.new(0, 10, 1, -45)
+    inputBox.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+    inputBox.PlaceholderText = "Ask something..."
+    inputBox.Text = ""
+    inputBox.TextColor3 = Color3.fromRGB(255,255,255)
+    inputBox.TextSize = 14
+    inputBox.Font = Enum.Font.SourceSans
+    inputBox.BorderSizePixel = 0
+    local inputCorner = Instance.new("UICorner")
+    inputCorner.CornerRadius = UDim.new(0, 5)
+    inputCorner.Parent = inputBox
+
+    local sendBtn = Instance.new("TextButton")
+    sendBtn.Parent = frame
+    sendBtn.Size = UDim2.new(0, 60, 0, 35)
+    sendBtn.Position = UDim2.new(1, -70, 1, -45)
+    sendBtn.BackgroundColor3 = Color3.fromRGB(0, 170, 100)
+    sendBtn.Text = "Send"
+    sendBtn.TextColor3 = Color3.fromRGB(255,255,255)
+    sendBtn.TextSize = 14
+    sendBtn.Font = Enum.Font.SourceSansBold
+    sendBtn.BorderSizePixel = 0
+    local sendCorner = Instance.new("UICorner")
+    sendCorner.CornerRadius = UDim.new(0, 5)
+    sendCorner.Parent = sendBtn
+
+    -- Функция добавления сообщения в чат
+    local function addMessage(text, isUser)
+        local label = Instance.new("TextLabel")
+        label.Parent = chatScroll
+        label.Size = UDim2.new(1, 0, 0, 30)
+        label.BackgroundColor3 = isUser and Color3.fromRGB(30, 70, 120) or Color3.fromRGB(50, 50, 70)
+        label.Text = text
+        label.TextColor3 = Color3.fromRGB(255,255,255)
+        label.TextSize = 13
+        label.Font = Enum.Font.SourceSans
+        label.TextWrapped = true
+        label.TextXAlignment = Enum.TextXAlignment.Left
+        label.BorderSizePixel = 0
+        local labelCorner = Instance.new("UICorner")
+        labelCorner.CornerRadius = UDim.new(0, 5)
+        labelCorner.Parent = label
+        task.wait(0.1)
+        chatScroll.CanvasPosition = Vector2.new(0, chatScroll.CanvasSize.Y.Offset)
+    end
+
+    -- Функция получения контекста игры
+    local function getGameContext()
+        local plr = game.Players.LocalPlayer
+        local context = {}
+        table.insert(context, "Игрок: " .. plr.Name)
+        if plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+            local pos = plr.Character.HumanoidRootPart.Position
+            table.insert(context, "Позиция: " .. string.format("%.1f, %.1f, %.1f", pos.X, pos.Y, pos.Z))
+        end
+        if plr.Character and plr.Character:FindFirstChild("Humanoid") then
+            local hum = plr.Character.Humanoid
+            table.insert(context, "Здоровье: " .. hum.Health .. "/" .. hum.MaxHealth)
+        end
+        -- Машина
+        if plr.Character and plr.Character:FindFirstChild("Humanoid") and plr.Character.Humanoid.SeatPart then
+            local car = plr.Character.Humanoid.SeatPart.Parent.Parent
+            table.insert(context, "В машине: " .. car.Name)
+            if car:FindFirstChild("PrimaryPart") then
+                local speed = car.PrimaryPart.AssemblyLinearVelocity.Magnitude
+                table.insert(context, "Скорость: " .. string.format("%.1f", speed))
+            end
+        end
+        -- Деньги
+        local money = plr:FindFirstChild("leaderstats") and plr.leaderstats:FindFirstChild("Money")
+        if money then
+            table.insert(context, "Деньги: " .. money.Value)
+        end
+        -- Активные задания
+        local missionGui = plr.PlayerGui:FindFirstChild("MissionRewardStars")
+        if missionGui then
+            local stars = 0
+            for _, star in pairs(missionGui.Frame.Stars:GetChildren()) do
+                if string.find(star.Name, "Star") and star.ImageColor3 == Color3.fromRGB(255, 189, 34) then
+                    stars = stars + 1
+                end
+            end
+            table.insert(context, "Звёзд в текущем задании: " .. stars)
+        end
+        -- Участок
+        for _, v in pairs(workspace.Tycoons:GetDescendants()) do
+            if v.Name == "Owner" and v:IsA("StringValue") and v.Value == plr.Name then
+                table.insert(context, "Владеет участком: " .. v.Parent.Name)
+                break
+            end
+        end
+        return table.concat(context, "\n")
+    end
+
+    -- Обработчик отправки
+    sendBtn.MouseButton1Click:Connect(function()
+        local question = inputBox.Text
+        if question == "" then return end
+        inputBox.Text = ""
+        addMessage("Вы: " .. question, true)
+
+        task.spawn(function()
+            local apiKey = settings.aiApiKey
+            if apiKey == "" then
+                addMessage("Ошибка: API ключ не задан.", false)
+                return
+            end
+
+            local context = getGameContext()
+            local prompt = "Ты — ассистент в игре Roblox Vehicle Dealership. Вот текущая информация об игроке:\n" .. context .. "\n\nВопрос игрока: " .. question
+
+            local data = {
+                model = settings.aiModel or "gpt-3.5-turbo",
+                messages = {
+                    {role = "system", content = "Ты полезный ассистент по игре Vehicle Dealership."},
+                    {role = "user", content = prompt}
+                },
+                max_tokens = 500,
+                temperature = 0.7
+            }
+
+            local jsonData = game:GetService("HttpService"):JSONEncode(data)
+            local headers = {
+                ["Content-Type"] = "application/json",
+                ["Authorization"] = "Bearer " .. apiKey
+            }
+
+            local success, response = pcall(function()
+                return game:GetService("HttpService"):RequestAsync({
+                    Url = "https://api.openai.com/v1/chat/completions",
+                    Method = "POST",
+                    Headers = headers,
+                    Body = jsonData
+                })
+            end)
+
+            if not success then
+                addMessage("Ошибка соединения с API.", false)
+                return
+            end
+
+            if response.Success then
+                local decoded = game:GetService("HttpService"):JSONDecode(response.Body)
+                local reply = decoded.choices and decoded.choices[1] and decoded.choices[1].message and decoded.choices[1].message.content
+                if reply then
+                    addMessage("ИИ: " .. reply, false)
+                    -- Логируем в файл
+                    local logEntry = os.date("%Y-%m-%d %H:%M:%S") .. "\nВопрос: " .. question .. "\nОтвет: " .. reply .. "\n---\n"
+                    pcall(function()
+                        local file = io.open("ai_logs.txt", "a")
+                        if file then
+                            file:write(logEntry)
+                            file:close()
+                        end
+                    end)
+                else
+                    addMessage("Ответ от API не распознан.", false)
+                end
+            else
+                addMessage("Ошибка API: " .. response.StatusCode, false)
+            end
+        end)
+    end)
+
+    -- Приветствие
+    addMessage("ИИ: Привет! Я помогу тебе с игрой. Задавай вопросы.", false)
+end)
+
+-- ==================== КНОПКИ СОХРАНЕНИЯ/ЗАГРУЗКИ ====================
 win5:AddButton("Save Settings", function()
     saveSettings()
     print("Settings saved!")
@@ -1758,4 +2008,4 @@ getfenv().smaller = settings.deliveryMinMoney
 getfenv().bigger = settings.deliveryMaxMoney
 getfenv().grav = workspace.Gravity
 
-print("✅ Скрипт успешно загружен (с внешней библиотекой)!")
+print("✅ Скрипт успешно загружен (с внешней библиотекой + AI)!")
