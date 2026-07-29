@@ -1,7 +1,7 @@
 -- ============================================================
 --           ФИНАЛЬНЫЙ ОБЪЕДИНЁННЫЙ СКРИПТ
 --   Vehicle Dealership – все функции + AI Assistant
---   Версия: 6.0 (на базе d25c62 + дополнения)
+--   Версия: 6.1 (поддержка OpenRouter + бесплатные модели)
 --   Используется внешняя UI библиотека (Marco8642)
 -- ============================================================
 
@@ -123,14 +123,15 @@ local settings = {
     autoPurchase = false,
     purchaseItem = "SomeItem",
 
-    -- НОВОЕ: Auto Purchase Spins (Free Dup)
+    -- Auto Purchase Spins (Free Dup)
     autoPurchaseSpins = false,
     purchaseSpinsType = "Standard",
     purchaseSpinsAmount = 1,
 
-    -- AI Assistant
+    -- AI Assistant (UPDATED)
+    aiProvider = "OpenRouter",  -- "OpenAI" или "OpenRouter"
     aiApiKey = "",
-    aiModel = "gpt-3.5-turbo",
+    aiModel = "google/gemma-2-9b-it",  -- бесплатная модель (OpenRouter)
 }
 
 -- Загрузка сохранений
@@ -1731,15 +1732,23 @@ win5:AddToggle("Block Analytics Events", function(state)
     end)
 end)
 
--- ==================== AI Assistant ====================
-win5:AddLabel("--- AI Assistant ---")
-win5:AddBox("OpenAI API Key", function(object, focus)
+-- ==================== AI Assistant (ОБНОВЛЁН – поддержка OpenRouter) ====================
+win5:AddLabel("--- AI Assistant (OpenRouter / OpenAI) ---")
+win5:AddDropdown({"OpenRouter", "OpenAI"}, function(state)
+    if state then
+        settings.aiProvider = state
+        saveSettings()
+    end
+end, "OpenRouter")  -- по умолчанию OpenRouter
+
+win5:AddBox("API Key (OpenRouter или OpenAI)", function(object, focus)
     if focus then
         settings.aiApiKey = object.Text
         saveSettings()
     end
 end)
-win5:AddBox("Model (default gpt-3.5-turbo)", function(object, focus)
+
+win5:AddBox("Model (например, google/gemma-2-9b-it)", function(object, focus)
     if focus then
         local val = object.Text
         if val and val ~= "" then
@@ -1755,6 +1764,9 @@ win5:AddButton("Open AI Assistant", function()
         warn("API ключ не задан")
         return
     end
+
+    -- Определяем URL в зависимости от провайдера
+    local apiUrl = (settings.aiProvider == "OpenRouter") and "https://openrouter.ai/api/v1/chat/completions" or "https://api.openai.com/v1/chat/completions"
 
     -- Создаём новое окно
     local aiGui = Instance.new("ScreenGui")
@@ -1779,7 +1791,7 @@ win5:AddButton("Open AI Assistant", function()
     title.Parent = frame
     title.Size = UDim2.new(1, 0, 0, 30)
     title.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
-    title.Text = "AI Assistant"
+    title.Text = "AI Assistant (" .. settings.aiProvider .. ")"
     title.TextColor3 = Color3.fromRGB(255,255,255)
     title.TextSize = 18
     title.Font = Enum.Font.SourceSansBold
@@ -1866,7 +1878,7 @@ win5:AddButton("Open AI Assistant", function()
         chatScroll.CanvasPosition = Vector2.new(0, chatScroll.CanvasSize.Y.Offset)
     end
 
-    -- Функция получения контекста игры
+    -- Функция получения контекста игры (с акцентом на доставку)
     local function getGameContext()
         local plr = game.Players.LocalPlayer
         local context = {}
@@ -1893,7 +1905,7 @@ win5:AddButton("Open AI Assistant", function()
         if money then
             table.insert(context, "Деньги: " .. money.Value)
         end
-        -- Активные задания
+        -- Активные задания (доставка)
         local missionGui = plr.PlayerGui:FindFirstChild("MissionRewardStars")
         if missionGui then
             local stars = 0
@@ -1902,7 +1914,7 @@ win5:AddButton("Open AI Assistant", function()
                     stars = stars + 1
                 end
             end
-            table.insert(context, "Звёзд в текущем задании: " .. stars)
+            table.insert(context, "Звёзд в текущем задании доставки: " .. stars)
         end
         -- Участок
         for _, v in pairs(workspace.Tycoons:GetDescendants()) do
@@ -1911,6 +1923,8 @@ win5:AddButton("Open AI Assistant", function()
                 break
             end
         end
+        -- Параметры доставки из настроек
+        table.insert(context, "Настройки доставки: минимальные звёзды = " .. settings.deliveryStars .. ", мин. награда = " .. settings.deliveryMinMoney .. ", макс. награда = " .. settings.deliveryMaxMoney)
         return table.concat(context, "\n")
     end
 
@@ -1929,12 +1943,18 @@ win5:AddButton("Open AI Assistant", function()
             end
 
             local context = getGameContext()
-            local prompt = "Ты — ассистент в игре Roblox Vehicle Dealership. Вот текущая информация об игроке:\n" .. context .. "\n\nВопрос игрока: " .. question
+            local systemPrompt = [[
+Ты — полезный ассистент по игре Roblox Vehicle Dealership.
+Ты хорошо разбираешься в механиках доставки: звёзды, награды, фильтрация заказов, выбор машин для продажи, улучшения участка и т.д.
+Отвечай кратко, по делу, давай конкретные советы.
+Если вопрос касается настроек доставки – используй переданные параметры (минимальные звёзды, мин/макс награда).
+]]
+            local prompt = "Вот текущая информация об игроке:\n" .. context .. "\n\nВопрос игрока: " .. question
 
             local data = {
-                model = settings.aiModel or "gpt-3.5-turbo",
+                model = settings.aiModel or "google/gemma-2-9b-it",
                 messages = {
-                    {role = "system", content = "Ты полезный ассистент по игре Vehicle Dealership."},
+                    {role = "system", content = systemPrompt},
                     {role = "user", content = prompt}
                 },
                 max_tokens = 500,
@@ -1946,10 +1966,15 @@ win5:AddButton("Open AI Assistant", function()
                 ["Content-Type"] = "application/json",
                 ["Authorization"] = "Bearer " .. apiKey
             }
+            -- Для OpenRouter добавляем дополнительные заголовки (необязательно, но полезно)
+            if settings.aiProvider == "OpenRouter" then
+                headers["HTTP-Referer"] = "https://www.roblox.com"
+                headers["X-Title"] = "Vehicle Dealership Assistant"
+            end
 
             local success, response = pcall(function()
                 return game:GetService("HttpService"):RequestAsync({
-                    Url = "https://api.openai.com/v1/chat/completions",
+                    Url = apiUrl,
                     Method = "POST",
                     Headers = headers,
                     Body = jsonData
@@ -1979,13 +2004,13 @@ win5:AddButton("Open AI Assistant", function()
                     addMessage("Ответ от API не распознан.", false)
                 end
             else
-                addMessage("Ошибка API: " .. response.StatusCode, false)
+                addMessage("Ошибка API: " .. response.StatusCode .. (response.Body and ("\n" .. response.Body) or ""), false)
             end
         end)
     end)
 
-    -- Приветствие
-    addMessage("ИИ: Привет! Я помогу тебе с игрой. Задавай вопросы.", false)
+    -- Приветствие с подсказкой по доставке
+    addMessage("ИИ: Привет! Я помогу тебе с игрой, особенно с доставкой. Задавай вопросы (например: как настроить фильтр наград?).", false)
 end)
 
 -- ==================== КНОПКИ СОХРАНЕНИЯ/ЗАГРУЗКИ ====================
@@ -2008,4 +2033,4 @@ getfenv().smaller = settings.deliveryMinMoney
 getfenv().bigger = settings.deliveryMaxMoney
 getfenv().grav = workspace.Gravity
 
-print("✅ Скрипт успешно загружен (с внешней библиотекой + AI)!")
+print("✅ Скрипт успешно загружен (с поддержкой OpenRouter и бесплатных моделей)!")
