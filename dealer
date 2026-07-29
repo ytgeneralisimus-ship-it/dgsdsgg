@@ -1,7 +1,8 @@
 -- ============================================================
---           ФИНАЛЬНЫЙ СКРИПТ (БИБЛИОТЕКА + ПРОКРУТКА)
+--           ФИНАЛЬНЫЙ СКРИПТ С ПРОКРУТКОЙ (РАБОЧИЙ)
 --   Vehicle Dealership – все функции + AI Assistant
---   Версия: 9.0 (прокрутка в библиотеке Marco8642)
+--   Версия: 9.1 (прокрутка через отдельную функцию)
+--   Используется библиотека Marco8642
 -- ============================================================
 
 -- ==================== СЛУЖЕБНЫЕ ФУНКЦИИ ====================
@@ -73,70 +74,53 @@ if not library then
     return
 end
 
--- ==================== ДОБАВЛЯЕМ ПРОКРУТКУ В ОКНА ====================
+-- ==================== ФУНКЦИЯ ДОБАВЛЕНИЯ ПРОКРУТКИ В ОКНО ====================
 
--- Сохраним оригинальный метод CreateWindow
-local originalCreateWindow = library.CreateWindow
-
--- Переопределяем CreateWindow, чтобы добавить прокрутку
-library.CreateWindow = function(params)
-    local window = originalCreateWindow(params)
+local function applyScroll(window)
+    -- Ждём, пока окно отрисуется
+    task.wait(0.05)
     
-    -- Ждём, пока окно создастся
+    -- Ищем основной контейнер внутри окна
+    local mainFrame = window._frame or window:FindFirstChildOfClass("Frame")
+    if not mainFrame then return end
+    
+    -- Собираем все дочерние элементы (кроме UIListLayout и UIPadding)
+    local children = {}
+    for _, child in pairs(mainFrame:GetChildren()) do
+        if not child:IsA("UIListLayout") and not child:IsA("UIPadding") then
+            table.insert(children, child)
+        end
+    end
+    
+    if #children == 0 then return end
+    
+    -- Создаём ScrollingFrame
+    local scroll = Instance.new("ScrollingFrame")
+    scroll.Name = "ScrollingContent"
+    scroll.Parent = mainFrame
+    scroll.Size = UDim2.new(1, 0, 1, 0)
+    scroll.BackgroundTransparency = 1
+    scroll.ScrollBarThickness = 6
+    scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+    
+    -- Переносим все элементы в ScrollingFrame
+    for _, child in ipairs(children) do
+        child.Parent = scroll
+    end
+    
+    -- Добавляем UIListLayout для вертикального расположения
+    local layout = Instance.new("UIListLayout")
+    layout.Parent = scroll
+    layout.SortOrder = Enum.SortOrder.LayoutOrder
+    layout.Padding = UDim.new(0, 6)
+    
+    -- Обновляем CanvasSize при изменении содержимого
+    local function updateSize()
+        scroll.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y + 10)
+    end
+    layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(updateSize)
     task.wait(0.1)
-    
-    -- Ищем основной контейнер окна (обычно это дочерний Frame с именем "Container" или первый Frame)
-    local mainFrame = window._frame  -- предположим, что библиотека хранит frame в поле _frame
-    if not mainFrame then
-        -- Если нет, пробуем найти Frame внутри окна
-        for _, child in pairs(window:GetChildren()) do
-            if child:IsA("Frame") then
-                mainFrame = child
-                break
-            end
-        end
-    end
-    
-    if mainFrame then
-        -- Сохраняем все дочерние элементы (они уже добавлены, но мы их переместим)
-        local children = {}
-        for _, child in pairs(mainFrame:GetChildren()) do
-            if child:IsA("UIListLayout") == false and child:IsA("UIPadding") == false then
-                table.insert(children, child)
-            end
-        end
-        
-        -- Создаём ScrollingFrame
-        local scrollFrame = Instance.new("ScrollingFrame")
-        scrollFrame.Name = "ScrollingContent"
-        scrollFrame.Parent = mainFrame
-        scrollFrame.Size = UDim2.new(1, 0, 1, 0)
-        scrollFrame.Position = UDim2.new(0, 0, 0, 0)
-        scrollFrame.BackgroundTransparency = 1
-        scrollFrame.ScrollBarThickness = 6
-        scrollFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
-        
-        -- Переносим все элементы в ScrollingFrame
-        for _, child in ipairs(children) do
-            child.Parent = scrollFrame
-        end
-        
-        -- Добавляем UIListLayout для автоматического расположения
-        local layout = Instance.new("UIListLayout")
-        layout.Parent = scrollFrame
-        layout.SortOrder = Enum.SortOrder.LayoutOrder
-        layout.Padding = UDim.new(0, 6)
-        
-        -- Обновляем CanvasSize при изменении содержимого
-        layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-            scrollFrame.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y + 10)
-        end)
-        -- Первое обновление
-        task.wait(0.1)
-        scrollFrame.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y + 10)
-    end
-    
-    return window
+    updateSize()
 end
 
 -- ==================== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ НАСТРОЕК ====================
@@ -568,6 +552,9 @@ win1:AddToggle("Annoying Popup Disabler", function(state)
     end
 end)
 
+-- Применяем прокрутку к первому окну после добавления всех элементов
+applyScroll(win1)
+
 -- ==================== ОКНО 2: Delivery Options ====================
 
 local win2 = library:CreateWindow({ text = "Delivery Options" })
@@ -783,6 +770,8 @@ win2:AddToggle("Auto Delivery (продвинутая)", function(state)
     end
 end)
 
+applyScroll(win2)
+
 -- ==================== ОКНО 3: Race ====================
 
 local win3 = library:CreateWindow({ text = "Race" })
@@ -802,7 +791,6 @@ win3:AddToggle("Auto Race (Standard)", function(state)
     settings.autoRace = state
     _G.racetest = state
     saveSettings()
-    -- Полный код стандартной гонки (из оригинального скрипта)
     workspace.Gravity = 196
     local race = nil
     local distance = math.huge
@@ -1242,7 +1230,6 @@ win3:AddToggle("AutoFarm [laps|checkpoints]", function(state)
     end
 end)
 
--- НОВАЯ ФУНКЦИЯ: Auto Race Farming (комбо)
 win3:AddToggle("Auto Race Farming (комбо)", function(state)
     settings.autoRaceFarming = state
     getfenv().autoRaceFarming = state
@@ -1268,6 +1255,8 @@ win3:AddToggle("Auto Race Farming (комбо)", function(state)
         end
     end)
 end)
+
+applyScroll(win3)
 
 -- ==================== ОКНО 4: Automation ====================
 
@@ -1352,7 +1341,6 @@ win4:AddToggle("Auto Claim Free Gifts (Store)", function(state)
     end)
 end)
 
--- НОВЫЙ ТОГГЛ: Auto Collect All Free Rewards
 win4:AddToggle("Auto Collect All Free Rewards", function(state)
     settings.autoCollectAllFreeRewards = state
     getfenv().autoCollectAllFree = state
@@ -1361,9 +1349,9 @@ win4:AddToggle("Auto Collect All Free Rewards", function(state)
         while getfenv().autoCollectAllFree do
             pcall(function()
                 local rep = game:GetService("ReplicatedStorage")
-                -- 1. Season
                 local remotes = rep:FindFirstChild("Remotes")
                 local services = remotes and remotes:FindFirstChild("Services")
+                -- Season
                 local seasonService = (services and (services:FindFirstChild("TrophySeasonRemotes") or services:FindFirstChild("SeasonService") or services:FindFirstChild("BattlePassService")))
                     or (remotes and (remotes:FindFirstChild("TrophySeasonRemotes") or remotes:FindFirstChild("SeasonService")))
                 if seasonService then
@@ -1384,7 +1372,7 @@ win4:AddToggle("Auto Collect All Free Rewards", function(state)
                         end
                     end
                 end
-                -- 2. Store gift
+                -- Store gift
                 local claimGift = rep:FindFirstChild("Databases")
                     and rep.Databases:FindFirstChild("Store")
                     and rep.Databases.Store:FindFirstChild("Featured")
@@ -1392,7 +1380,7 @@ win4:AddToggle("Auto Collect All Free Rewards", function(state)
                 if claimGift then
                     claimGift:InvokeServer()
                 end
-                -- 3. Daily Streak
+                -- Daily Streak
                 local dailyEvent = rep:FindFirstChild("Remotes")
                     and rep.Remotes:FindFirstChild("EventController")
                     and rep.Remotes.EventController:FindFirstChild("DailyStreak")
@@ -1415,7 +1403,6 @@ win4:AddToggle("Auto Collect All Free Rewards", function(state)
     end)
 end)
 
--- ========== ТОГГЛЫ ДЛЯ СПИНОВ (SpinEvent) ==========
 win4:AddLabel("Spin Settings (SpinEvent)")
 win4:AddBox("Spin count per cycle (default 1)", function(object, focus)
     if focus then
@@ -1483,7 +1470,6 @@ win4:AddToggle("Auto Spin Hyper (с количеством)", function(state)
     end)
 end)
 
--- ========== НОВЫЙ ТОГГЛ: Auto Purchase Spins (Free Dup) ==========
 win4:AddLabel("--- Auto Purchase Spins (Free Dup) ---")
 win4:AddLabel("Тип спина (например: Standard, Hyper, SpinPack)")
 win4:AddBox("Spin type", function(object, focus)
@@ -1527,7 +1513,6 @@ win4:AddToggle("Auto Purchase Spins (Free Dup)", function(state)
     end)
 end)
 
--- ========== ОСТАЛЬНЫЕ ТОГГЛЫ AUTOMATION ==========
 win4:AddLabel("Kits: количество за цикл")
 win4:AddBox("Enter count (default 1)", function(object, focus)
     if focus then
@@ -1693,6 +1678,8 @@ win4:AddToggle("Auto Claim Daily Streak", function(state)
     end)
 end)
 
+applyScroll(win4)
+
 -- ==================== ОКНО 5: Misc ====================
 
 local win5 = library:CreateWindow({ text = "Misc" })
@@ -1752,7 +1739,7 @@ win5:AddToggle("Auto Loop All (Season + Kits + Spins)", function(state)
                         task.wait(0.05)
                     end
                 end
-                -- Kits (с количеством)
+                -- Kits
                 local consumeRemote = services and services:FindFirstChild("ConsumableServiceRemotes") and services.ConsumableServiceRemotes:FindFirstChild("Consume")
                 if consumeRemote then
                     local count = settings.kitCount or 1
@@ -1767,7 +1754,7 @@ win5:AddToggle("Auto Loop All (Season + Kits + Spins)", function(state)
                         task.wait(0.1)
                     end
                 end
-                -- Spins (SpinEvent) с количеством
+                -- Spins
                 local spinRemote = game:GetService("ReplicatedStorage"):FindFirstChild("Databases")
                     and game.ReplicatedStorage.Databases:FindFirstChild("Spinners")
                     and game.ReplicatedStorage.Databases.Spinners:FindFirstChild("SpinEvent")
@@ -1829,7 +1816,6 @@ win5:AddToggle("Auto Use Deluxe Upgrade Kit", function(state)
     end)
 end)
 
--- ==== НОВЫЙ ТОГГЛ: Auto Smart Sell (самый дорогой заказ) ====
 win5:AddToggle("Auto Smart Sell (самый дорогой заказ)", function(state)
     settings.autoSmartSell = state
     getfenv().smartSell = state
@@ -1892,7 +1878,6 @@ win5:AddToggle("Auto Smart Sell (самый дорогой заказ)", functio
     end)
 end)
 
--- ==== ПЕРЕНЕСЁННЫЕ ТОГГЛЫ (Auto Consume и Auto Purchase) ====
 win5:AddLabel("Auto Consume Item")
 win5:AddBox("Enter item name", function(object, focus)
     if focus then
@@ -1956,7 +1941,6 @@ win5:AddToggle("Block Analytics Events", function(state)
     end)
 end)
 
--- Кнопка отладки
 win5:AddButton("Show All Remotes", function()
     print("=== All Remotes in ReplicatedStorage ===")
     local function printRemotes(parent, indent)
@@ -1974,7 +1958,7 @@ win5:AddButton("Show All Remotes", function()
     print("=== End of Remotes ===")
 end)
 
--- ==================== AI Assistant (как в версии 7.0) ====================
+-- ==================== AI Assistant ====================
 win5:AddLabel("--- AI Assistant (универсальный) ---")
 win5:AddDropdown({
     "OpenAI",
@@ -2017,7 +2001,7 @@ win5:AddBox("Введите системный промпт", function(object, f
         settings.aiSystemPrompt = object.Text
         saveSettings()
     end
-end, true) -- многострочный
+end, true)
 
 win5:AddButton("Open AI Assistant", function()
     if settings.aiApiKey == "" then
@@ -2049,7 +2033,7 @@ win5:AddButton("Open AI Assistant", function()
         apiUrl = "https://api.openai.com/v1/chat/completions"
     end
 
-    -- Создаём окно чата
+    -- Создаём окно чата (без прокрутки внутри чата — там уже есть ScrollingFrame)
     local aiGui = Instance.new("ScreenGui")
     aiGui.Name = "AIAssistant"
     aiGui.Parent = game:GetService("CoreGui")
@@ -2317,7 +2301,6 @@ win5:AddButton("Open AI Assistant", function()
     addMessage("ИИ: Привет! Я твой универсальный помощник. Могу анализировать игровую среду, подсказывать по доставке, гонкам и автоматизации. Задавай вопросы!", false)
 end)
 
--- ==================== КНОПКИ СОХРАНЕНИЯ/ЗАГРУЗКИ ====================
 win5:AddButton("Save Settings", function()
     saveSettings()
     print("Settings saved!")
@@ -2328,6 +2311,8 @@ win5:AddButton("Load Settings", function()
     print("Settings loaded!")
 end)
 
+applyScroll(win5)
+
 -- ==================== УСТАНОВКА НАЧАЛЬНЫХ ЗНАЧЕНИЙ ====================
 
 getfenv().speed = settings.driveSpeed
@@ -2337,4 +2322,4 @@ getfenv().smaller = settings.deliveryMinMoney
 getfenv().bigger = settings.deliveryMaxMoney
 getfenv().grav = workspace.Gravity
 
-print("✅ Скрипт успешно загружен (версия 9.0 с прокруткой в библиотеке Marco8642)!")
+print("✅ Скрипт успешно загружен (версия 9.1 с прокруткой через applyScroll)!")
