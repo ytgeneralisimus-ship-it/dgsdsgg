@@ -1,7 +1,7 @@
 -- ============================================================
 --           ФИНАЛЬНЫЙ ОБЪЕДИНЁННЫЙ СКРИПТ
 --   Vehicle Dealership – все функции + AI Assistant
---   Версия: 6.1 (поддержка OpenRouter + бесплатные модели)
+--   Версия: 7.0 (универсальный AI + новые фичи)
 --   Используется внешняя UI библиотека (Marco8642)
 -- ============================================================
 
@@ -99,6 +99,7 @@ local settings = {
     autoRaceFast = false,
     autoDriftRace = false,
     autoFarmLaps = false,
+    autoRaceFarming = false,   -- НОВОЕ: комбинированный фарм гонок
 
     -- Automation
     autoSeason = false,
@@ -128,10 +129,15 @@ local settings = {
     purchaseSpinsType = "Standard",
     purchaseSpinsAmount = 1,
 
-    -- AI Assistant (UPDATED)
-    aiProvider = "OpenRouter",  -- "OpenAI" или "OpenRouter"
+    -- НОВЫЕ ФУНКЦИИ
+    autoCollectAllFreeRewards = false, -- сбор всех бесплатных наград
+    autoSmartSell = false,            -- умная продажа (самый дорогой заказ)
+
+    -- AI Assistant (расширенный)
+    aiProvider = "OpenRouter",
     aiApiKey = "",
-    aiModel = "google/gemma-2-9b-it",  -- бесплатная модель (OpenRouter)
+    aiModel = "google/gemma-2-9b-it",
+    aiSystemPrompt = "Ты полезный ассистент по игре Roblox Vehicle Dealership. Отвечай кратко, давай конкретные советы.",
 }
 
 -- Загрузка сохранений
@@ -1171,6 +1177,37 @@ win3:AddToggle("AutoFarm [laps|checkpoints]", function(state)
     end
 end)
 
+-- НОВАЯ ФУНКЦИЯ: Auto Race Farming (комбинированный фарм гонок)
+win3:AddToggle("Auto Race Farming (комбо)", function(state)
+    settings.autoRaceFarming = state
+    getfenv().autoRaceFarming = state
+    saveSettings()
+    task.spawn(function()
+        while getfenv().autoRaceFarming do
+            -- Включаем последовательно все режимы гонок (по очереди)
+            local modes = {
+                {flag = "racetest", toggle = settings.autoRace, name = "Standard"},
+                {flag = "racetest_fast", toggle = settings.autoRaceFast, name = "Fast"},
+                {flag = "racetest3", toggle = settings.autoDriftRace, name = "Drift"},
+            }
+            for _, mode in ipairs(modes) do
+                if not getfenv().autoRaceFarming then break end
+                -- Включаем режим
+                _G[mode.flag] = true
+                -- Ждём некоторое время (например, 60 секунд) или пока флаг не сбросится
+                local start = tick()
+                while getfenv().autoRaceFarming and _G[mode.flag] and tick() - start < 60 do
+                    task.wait(1)
+                end
+                -- Выключаем режим (если он ещё включён)
+                _G[mode.flag] = false
+                task.wait(2) -- пауза между режимами
+            end
+            task.wait(5) -- пауза между циклами
+        end
+    end)
+end)
+
 -- ==================== ОКНО 4: Automation ====================
 
 local win4 = library:CreateWindow({ text = "Automation" })
@@ -1250,6 +1287,71 @@ win4:AddToggle("Auto Claim Free Gifts (Store)", function(state)
                 end
             end)
             task.wait(5)
+        end
+    end)
+end)
+
+-- НОВЫЙ ТОГГЛ: Auto Collect All Free Rewards (комбинированный)
+win4:AddToggle("Auto Collect All Free Rewards", function(state)
+    settings.autoCollectAllFreeRewards = state
+    getfenv().autoCollectAllFree = state
+    saveSettings()
+    task.spawn(function()
+        while getfenv().autoCollectAllFree do
+            pcall(function()
+                -- 1. Сезонные награды
+                local rep = game:GetService("ReplicatedStorage")
+                local remotes = rep:FindFirstChild("Remotes")
+                local services = remotes and remotes:FindFirstChild("Services")
+                local seasonService = (services and (services:FindFirstChild("TrophySeasonRemotes") or services:FindFirstChild("SeasonService") or services:FindFirstChild("BattlePassService")))
+                    or (remotes and (remotes:FindFirstChild("TrophySeasonRemotes") or remotes:FindFirstChild("SeasonService")))
+                if seasonService then
+                    local claimRemote = seasonService:FindFirstChild("ClaimLevelReward") or seasonService:FindFirstChild("ClaimReward") or seasonService:FindFirstChild("Claim")
+                    if claimRemote then
+                        for level = settings.seasonFrom, settings.seasonTo do
+                            if not getfenv().autoCollectAllFree then break end
+                            if claimRemote:IsA("RemoteFunction") then
+                                claimRemote:InvokeServer(level, "Free")
+                                claimRemote:InvokeServer(level, "Premium")
+                                claimRemote:InvokeServer(level, "Elite")
+                            elseif claimRemote:IsA("RemoteEvent") then
+                                claimRemote:FireServer(level, "Free")
+                                claimRemote:FireServer(level, "Premium")
+                                claimRemote:FireServer(level, "Elite")
+                            end
+                            task.wait(0.05)
+                        end
+                    end
+                end
+                -- 2. Бесплатные подарки в магазине
+                local claimGift = rep:FindFirstChild("Databases")
+                    and rep.Databases:FindFirstChild("Store")
+                    and rep.Databases.Store:FindFirstChild("Featured")
+                    and rep.Databases.Store.Featured:FindFirstChild("ClaimFreeGift")
+                if claimGift then
+                    claimGift:InvokeServer()
+                end
+                -- 3. Daily Streak
+                local dailyEvent = rep:FindFirstChild("Remotes")
+                    and rep.Remotes:FindFirstChild("EventController")
+                    and rep.Remotes.EventController:FindFirstChild("DailyStreak")
+                if dailyEvent and dailyEvent:IsA("RemoteEvent") then
+                    firesignal(dailyEvent.OnClientEvent, {Action = "Claim"})
+                    local claimFunc = dailyEvent:FindFirstChild("Claim")
+                    if claimFunc and claimFunc:IsA("RemoteFunction") then
+                        claimFunc:InvokeServer()
+                    end
+                else
+                    local claimDaily = rep:FindFirstChild("Remotes")
+                        and rep.Remotes:FindFirstChild("DailyStreak")
+                    if claimDaily and claimDaily:IsA("RemoteFunction") then
+                        claimDaily:InvokeServer()
+                    end
+                end
+                -- 4. Ивентовые награды (можно добавить поиск по ремоутам с именами Event, Reward и т.д.)
+                -- Здесь можно реализовать перебор всех ремоутов и попытку вызова, но осторожно.
+            end)
+            task.wait(10)
         end
     end)
 end)
@@ -1668,6 +1770,69 @@ win5:AddToggle("Auto Use Deluxe Upgrade Kit", function(state)
     end)
 end)
 
+-- ==== НОВЫЙ ТОГГЛ: Auto Smart Sell (выбирает самый дорогой заказ) ====
+win5:AddToggle("Auto Smart Sell (самый дорогой заказ)", function(state)
+    settings.autoSmartSell = state
+    getfenv().smartSell = state
+    saveSettings()
+    task.spawn(function()
+        while getfenv().smartSell do
+            task.wait(2)
+            pcall(function()
+                local tycoon
+                for _, v in pairs(workspace.Tycoons:GetDescendants()) do
+                    if v.Name == "Owner" and v:IsA("StringValue") and (string.find(v.Parent.Name, "Plot") or string.find(v.Parent.Name, "Slot")) and v.Value == game.Players.LocalPlayer.Name then
+                        tycoon = v.Parent
+                        break
+                    end
+                end
+                if tycoon and tycoon:FindFirstChild("Dealership") then
+                    local customer
+                    for _, v in pairs(tycoon.Dealership:GetChildren()) do
+                        if v:IsA("Model") and v.PrimaryPart and v.PrimaryPart.Name == "HumanoidRootPart" then
+                            customer = v
+                            break
+                        end
+                    end
+                    if customer then
+                        local text = customer:GetAttribute("OrderSpecBudget"):split(";")
+                        local minPrice = settings.minSellPrice or 0
+                        local selectedCar
+                        local maxPrice = 0
+                        for _, v in pairs(require(game:GetService("ReplicatedStorage").Data.CarShopEntries).CarsInShop) do
+                            if v.PriceValue and v.PriceValue > tonumber(text[1]) and v.PriceValue < tonumber(text[2]) then
+                                if v.PriceValue >= minPrice and v.PriceValue > maxPrice then
+                                    maxPrice = v.PriceValue
+                                    selectedCar = v
+                                end
+                            end
+                        end
+                        if selectedCar then
+                            local remotes = game:GetService("ReplicatedStorage").Remotes.DealershipCustomerController.NPCHandler
+                            local orderId = customer:GetAttribute("OrderId")
+                            remotes:FireServer({["Action"] = "AcceptOrder", ["OrderId"] = orderId})
+                            task.wait(0.5)
+                            remotes:FireServer({
+                                ["OrderId"] = orderId,
+                                ["Action"] = "CompleteOrder",
+                                ["Specs"] = {
+                                    ["Car"] = selectedCar.Id,
+                                    ["Color"] = customer:GetAttribute("OrderSpecColor"),
+                                    ["Rims"] = customer:GetAttribute("OrderSpecRims"),
+                                    ["Springs"] = customer:GetAttribute("OrderSpecSprings"),
+                                    ["RimColor"] = customer:GetAttribute("OrderSpecRimColor")
+                                }
+                            })
+                            task.wait(0.5)
+                            remotes:FireServer({["Action"] = "CollectReward", ["OrderId"] = orderId})
+                        end
+                    end
+                end
+            end)
+        end
+    end)
+end)
+
 -- ==== ПЕРЕНЕСЁННЫЕ ТОГГЛЫ (Auto Consume и Auto Purchase) ====
 win5:AddLabel("Auto Consume Item")
 win5:AddBox("Enter item name", function(object, focus)
@@ -1732,23 +1897,53 @@ win5:AddToggle("Block Analytics Events", function(state)
     end)
 end)
 
--- ==================== AI Assistant (ОБНОВЛЁН – поддержка OpenRouter) ====================
-win5:AddLabel("--- AI Assistant (OpenRouter / OpenAI) ---")
-win5:AddDropdown({"OpenRouter", "OpenAI"}, function(state)
+-- ==================== КНОПКА ОТЛАДКИ ====================
+win5:AddButton("Show All Remotes", function()
+    print("=== All Remotes in ReplicatedStorage ===")
+    local function printRemotes(parent, indent)
+        indent = indent or ""
+        for _, child in pairs(parent:GetChildren()) do
+            if child:IsA("RemoteEvent") or child:IsA("RemoteFunction") or child:IsA("RemoteAction") then
+                print(indent .. child:GetFullName())
+            end
+            if #child:GetChildren() > 0 then
+                printRemotes(child, indent .. "  ")
+            end
+        end
+    end
+    printRemotes(game:GetService("ReplicatedStorage"))
+    print("=== End of Remotes ===")
+end)
+
+-- ==================== AI Assistant (расширенный) ====================
+win5:AddLabel("--- AI Assistant (универсальный) ---")
+-- Выбор провайдера
+local providerDropdown = win5:AddDropdown({
+    "OpenAI",
+    "OpenRouter",
+    "Anthropic",
+    "Google (Gemini)",
+    "Cohere",
+    "AI21",
+    "DeepSeek",
+    "Mistral",
+    "Groq",
+    "Other"
+}, function(state)
     if state then
         settings.aiProvider = state
         saveSettings()
     end
-end, "OpenRouter")  -- по умолчанию OpenRouter
+end, "OpenRouter")
 
-win5:AddBox("API Key (OpenRouter или OpenAI)", function(object, focus)
+win5:AddBox("API Key (для выбранного провайдера)", function(object, focus)
     if focus then
         settings.aiApiKey = object.Text
         saveSettings()
     end
 end)
 
-win5:AddBox("Model (например, google/gemma-2-9b-it)", function(object, focus)
+win5:AddBox("Модель (название модели)", function(object, focus)
     if focus then
         local val = object.Text
         if val and val ~= "" then
@@ -1758,6 +1953,14 @@ win5:AddBox("Model (например, google/gemma-2-9b-it)", function(object, f
     end
 end)
 
+win5:AddLabel("Системный промпт (задаёт поведение AI)")
+local sysPromptBox = win5:AddBox("Введите системный промпт", function(object, focus)
+    if focus then
+        settings.aiSystemPrompt = object.Text
+        saveSettings()
+    end
+end, true) -- Предполагаем, что библиотека поддерживает многострочный режим (если нет, можно оставить однострочный)
+
 win5:AddButton("Open AI Assistant", function()
     -- Проверка наличия ключа
     if settings.aiApiKey == "" then
@@ -1766,9 +1969,31 @@ win5:AddButton("Open AI Assistant", function()
     end
 
     -- Определяем URL в зависимости от провайдера
-    local apiUrl = (settings.aiProvider == "OpenRouter") and "https://openrouter.ai/api/v1/chat/completions" or "https://api.openai.com/v1/chat/completions"
+    local provider = settings.aiProvider
+    local apiUrl
+    if provider == "OpenAI" then
+        apiUrl = "https://api.openai.com/v1/chat/completions"
+    elseif provider == "OpenRouter" then
+        apiUrl = "https://openrouter.ai/api/v1/chat/completions"
+    elseif provider == "Anthropic" then
+        apiUrl = "https://api.anthropic.com/v1/messages"
+    elseif provider == "Google (Gemini)" then
+        apiUrl = "https://generativelanguage.googleapis.com/v1beta/models/" .. settings.aiModel .. ":generateContent?key=" .. settings.aiApiKey
+    elseif provider == "Cohere" then
+        apiUrl = "https://api.cohere.ai/v1/chat"
+    elseif provider == "AI21" then
+        apiUrl = "https://api.ai21.com/studio/v1/chat/completions"
+    elseif provider == "DeepSeek" then
+        apiUrl = "https://api.deepseek.com/v1/chat/completions"
+    elseif provider == "Mistral" then
+        apiUrl = "https://api.mistral.ai/v1/chat/completions"
+    elseif provider == "Groq" then
+        apiUrl = "https://api.groq.com/openai/v1/chat/completions"
+    else
+        apiUrl = "https://api.openai.com/v1/chat/completions" -- fallback
+    end
 
-    -- Создаём новое окно
+    -- Создаём новое окно чата
     local aiGui = Instance.new("ScreenGui")
     aiGui.Name = "AIAssistant"
     aiGui.Parent = game:GetService("CoreGui")
@@ -1791,7 +2016,7 @@ win5:AddButton("Open AI Assistant", function()
     title.Parent = frame
     title.Size = UDim2.new(1, 0, 0, 30)
     title.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
-    title.Text = "AI Assistant (" .. settings.aiProvider .. ")"
+    title.Text = "AI Assistant (" .. provider .. ")"
     title.TextColor3 = Color3.fromRGB(255,255,255)
     title.TextSize = 18
     title.Font = Enum.Font.SourceSansBold
@@ -1878,8 +2103,8 @@ win5:AddButton("Open AI Assistant", function()
         chatScroll.CanvasPosition = Vector2.new(0, chatScroll.CanvasSize.Y.Offset)
     end
 
-    -- Функция получения контекста игры (с акцентом на доставку)
-    local function getGameContext()
+    -- Функция получения расширенного контекста игры
+    local function getExtendedGameContext()
         local plr = game.Players.LocalPlayer
         local context = {}
         table.insert(context, "Игрок: " .. plr.Name)
@@ -1923,8 +2148,32 @@ win5:AddButton("Open AI Assistant", function()
                 break
             end
         end
-        -- Параметры доставки из настроек
-        table.insert(context, "Настройки доставки: минимальные звёзды = " .. settings.deliveryStars .. ", мин. награда = " .. settings.deliveryMinMoney .. ", макс. награда = " .. settings.deliveryMaxMoney)
+        -- Информация о доступных машинах в магазине (первые 5)
+        local cars = require(game:GetService("ReplicatedStorage").Data.CarShopEntries).CarsInShop
+        table.insert(context, "Доступные машины в магазине (первые 5):")
+        for i = 1, math.min(5, #cars) do
+            table.insert(context, "  " .. cars[i].Name .. " (цена: " .. (cars[i].PriceValue or "?") .. ")")
+        end
+        -- Информация о ремоутах (для доступа к "файлам плейса")
+        table.insert(context, "=== Доступные ремоуты (первые 20) ===")
+        local remoteCount = 0
+        local function collectRemotes(parent)
+            for _, child in pairs(parent:GetChildren()) do
+                if remoteCount >= 20 then break end
+                if child:IsA("RemoteEvent") or child:IsA("RemoteFunction") then
+                    table.insert(context, "  " .. child:GetFullName())
+                    remoteCount = remoteCount + 1
+                end
+                if #child:GetChildren() > 0 then
+                    collectRemotes(child)
+                end
+            end
+        end
+        collectRemotes(game:GetService("ReplicatedStorage"))
+        if remoteCount == 0 then
+            table.insert(context, "  (нет найденных ремоутов)")
+        end
+        table.insert(context, "=== Конец списка ремоутов ===")
         return table.concat(context, "\n")
     end
 
@@ -1942,14 +2191,9 @@ win5:AddButton("Open AI Assistant", function()
                 return
             end
 
-            local context = getGameContext()
-            local systemPrompt = [[
-Ты — полезный ассистент по игре Roblox Vehicle Dealership.
-Ты хорошо разбираешься в механиках доставки: звёзды, награды, фильтрация заказов, выбор машин для продажи, улучшения участка и т.д.
-Отвечай кратко, по делу, давай конкретные советы.
-Если вопрос касается настроек доставки – используй переданные параметры (минимальные звёзды, мин/макс награда).
-]]
-            local prompt = "Вот текущая информация об игроке:\n" .. context .. "\n\nВопрос игрока: " .. question
+            local context = getExtendedGameContext()
+            local systemPrompt = settings.aiSystemPrompt or "Ты полезный ассистент по игре Roblox Vehicle Dealership. Отвечай кратко, давай конкретные советы."
+            local prompt = "Вот текущая информация об игроке и игровой среде:\n" .. context .. "\n\nВопрос игрока: " .. question
 
             local data = {
                 model = settings.aiModel or "google/gemma-2-9b-it",
@@ -1966,15 +2210,26 @@ win5:AddButton("Open AI Assistant", function()
                 ["Content-Type"] = "application/json",
                 ["Authorization"] = "Bearer " .. apiKey
             }
-            -- Для OpenRouter добавляем дополнительные заголовки (необязательно, но полезно)
-            if settings.aiProvider == "OpenRouter" then
-                headers["HTTP-Referer"] = "https://www.roblox.com"
-                headers["X-Title"] = "Vehicle Dealership Assistant"
+            -- Дополнительные заголовки для некоторых провайдеров
+            if provider == "Anthropic" then
+                headers["x-api-key"] = apiKey
+                headers["anthropic-version"] = "2023-06-01"
+            elseif provider == "Google (Gemini)" then
+                -- Для Gemini ключ передаётся в URL, поэтому не в заголовках
+                headers["Content-Type"] = "application/json"
+            elseif provider == "Cohere" then
+                headers["Authorization"] = "Bearer " .. apiKey
+            end
+
+            local finalUrl = apiUrl
+            -- Для Gemini подставляем ключ в URL
+            if provider == "Google (Gemini)" then
+                finalUrl = "https://generativelanguage.googleapis.com/v1beta/models/" .. (settings.aiModel or "gemini-pro") .. ":generateContent?key=" .. apiKey
             end
 
             local success, response = pcall(function()
                 return game:GetService("HttpService"):RequestAsync({
-                    Url = apiUrl,
+                    Url = finalUrl,
                     Method = "POST",
                     Headers = headers,
                     Body = jsonData
@@ -1988,7 +2243,17 @@ win5:AddButton("Open AI Assistant", function()
 
             if response.Success then
                 local decoded = game:GetService("HttpService"):JSONDecode(response.Body)
-                local reply = decoded.choices and decoded.choices[1] and decoded.choices[1].message and decoded.choices[1].message.content
+                local reply = nil
+                -- Парсим ответ в зависимости от провайдера
+                if provider == "Anthropic" then
+                    reply = decoded.content and decoded.content[1] and decoded.content[1].text
+                elseif provider == "Google (Gemini)" then
+                    reply = decoded.candidates and decoded.candidates[1] and decoded.candidates[1].content and decoded.candidates[1].content.parts and decoded.candidates[1].content.parts[1] and decoded.candidates[1].content.parts[1].text
+                elseif provider == "Cohere" then
+                    reply = decoded.text
+                else
+                    reply = decoded.choices and decoded.choices[1] and decoded.choices[1].message and decoded.choices[1].message.content
+                end
                 if reply then
                     addMessage("ИИ: " .. reply, false)
                     -- Логируем в файл
@@ -2001,7 +2266,7 @@ win5:AddButton("Open AI Assistant", function()
                         end
                     end)
                 else
-                    addMessage("Ответ от API не распознан.", false)
+                    addMessage("Ответ от API не распознан. Проверьте модель и формат.", false)
                 end
             else
                 addMessage("Ошибка API: " .. response.StatusCode .. (response.Body and ("\n" .. response.Body) or ""), false)
@@ -2009,8 +2274,8 @@ win5:AddButton("Open AI Assistant", function()
         end)
     end)
 
-    -- Приветствие с подсказкой по доставке
-    addMessage("ИИ: Привет! Я помогу тебе с игрой, особенно с доставкой. Задавай вопросы (например: как настроить фильтр наград?).", false)
+    -- Приветствие
+    addMessage("ИИ: Привет! Я твой универсальный помощник. Могу анализировать игровую среду, подсказывать по доставке, гонкам и автоматизации. Задавай вопросы!", false)
 end)
 
 -- ==================== КНОПКИ СОХРАНЕНИЯ/ЗАГРУЗКИ ====================
@@ -2033,4 +2298,4 @@ getfenv().smaller = settings.deliveryMinMoney
 getfenv().bigger = settings.deliveryMaxMoney
 getfenv().grav = workspace.Gravity
 
-print("✅ Скрипт успешно загружен (с поддержкой OpenRouter и бесплатных моделей)!")
+print("✅ Скрипт успешно загружен (версия 7.0 с универсальным AI и новыми фичами)!")
