@@ -1,7 +1,7 @@
 -- ============================================================
---           ФИНАЛЬНЫЙ ОБЪЕДИНЁННЫЙ СКРИПТ (ВСЁ В ОДНОМ)
---   Vehicle Dealership – все функции + прокрутка + сохранение
---   Версия: 10.0 (на базе 9.1 + улучшения)
+--           РАСШИРЕННЫЙ СКРИПТ НА ОСНОВЕ car dealer.txt
+--   Все функции из объединённого скрипта (версия 11.0)
+--   Сохранение в JSON, 4 окна, без прокрутки
 -- ============================================================
 
 -- ==================== СЛУЖЕБНЫЕ ФУНКЦИИ ====================
@@ -73,47 +73,7 @@ if not library then
     return
 end
 
--- ==================== ФУНКЦИЯ ДОБАВЛЕНИЯ ПРОКРУТКИ В ОКНО ====================
-
-local function applyScroll(window)
-    task.wait(0.05)
-    local mainFrame = window._frame or window:FindFirstChildOfClass("Frame")
-    if not mainFrame then return end
-    
-    local children = {}
-    for _, child in pairs(mainFrame:GetChildren()) do
-        if not child:IsA("UIListLayout") and not child:IsA("UIPadding") then
-            table.insert(children, child)
-        end
-    end
-    if #children == 0 then return end
-    
-    local scroll = Instance.new("ScrollingFrame")
-    scroll.Name = "ScrollingContent"
-    scroll.Parent = mainFrame
-    scroll.Size = UDim2.new(1, 0, 1, 0)
-    scroll.BackgroundTransparency = 1
-    scroll.ScrollBarThickness = 6
-    scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
-    
-    for _, child in ipairs(children) do
-        child.Parent = scroll
-    end
-    
-    local layout = Instance.new("UIListLayout")
-    layout.Parent = scroll
-    layout.SortOrder = Enum.SortOrder.LayoutOrder
-    layout.Padding = UDim.new(0, 6)
-    
-    local function updateSize()
-        scroll.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y + 10)
-    end
-    layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(updateSize)
-    task.wait(0.1)
-    updateSize()
-end
-
--- ==================== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ НАСТРОЕК ====================
+-- ==================== ГЛОБАЛЬНЫЕ НАСТРОЙКИ (JSON) ====================
 
 local settings = {
     -- Main
@@ -140,7 +100,7 @@ local settings = {
     autoFarmLaps = false,
     autoRaceFarming = false,
 
-    -- Automation
+    -- Automation & Misc
     autoSeason = false,
     seasonFrom = 1,
     seasonTo = 50,
@@ -163,18 +123,14 @@ local settings = {
     consumeItem = "SpinTicket",
     autoPurchase = false,
     purchaseItem = "SomeItem",
-
-    -- Auto Purchase Spins (Free Dup)
     autoPurchaseSpins = false,
     purchaseSpinsType = "Standard",
     purchaseSpinsAmount = 1,
-
-    -- Новые функции
     autoCollectAllFreeRewards = false,
     autoSmartSell = false,
 }
 
--- Загрузка сохранений
+-- Загрузка из JSON
 local function loadSettings()
     if pcall(function() return readfile("VD_settings.json") end) then
         local data = game:GetService("HttpService"):JSONDecode(readfile("VD_settings.json"))
@@ -186,17 +142,33 @@ local function loadSettings()
             end
         end
     end
+    -- Для совместимости со старым файлом cdtdelivery.txt
+    if pcall(function() return readfile("cdtdelivery.txt") end) and readfile("cdtdelivery.txt") ~= nil then
+        local data = readfile("cdtdelivery.txt"):split(" ")
+        if #data >= 3 then
+            settings.deliveryStars = tonumber(data[1]) or 5
+            settings.deliveryMinMoney = tonumber(data[2]) or 0
+            settings.deliveryMaxMoney = tonumber(data[3]) or 999999999
+        end
+    end
 end
 loadSettings()
 
 local function saveSettings()
     local json = game:GetService("HttpService"):JSONEncode(settings)
     writefile("VD_settings.json", json)
+    -- Также сохраняем в старый формат для совместимости
+    local oldData = tostring(settings.deliveryStars.." "..settings.deliveryMinMoney.." "..settings.deliveryMaxMoney)
+    writefile("cdtdelivery.txt", oldData)
 end
 
 -- ==================== ОКНО 1: Vehicle Dealership ====================
 
 local win1 = library:CreateWindow({ text = "Vehicle Dealership" })
+-- Увеличиваем высоту, чтобы всё поместилось
+if win1._frame then
+    win1._frame.Size = UDim2.new(0, 420, 0, 600)
+end
 
 win1:AddBox("Auto Drive Speed (max 2000)", function(object, focus)
     if focus then
@@ -537,11 +509,12 @@ win1:AddToggle("Annoying Popup Disabler", function(state)
     end
 end)
 
-applyScroll(win1)
-
 -- ==================== ОКНО 2: Delivery Options ====================
 
 local win2 = library:CreateWindow({ text = "Delivery Options" })
+if win2._frame then
+    win2._frame.Size = UDim2.new(0, 420, 0, 350)
+end
 
 win2:AddLabel("Minimum Stars")
 win2:AddBox("Enter stars (default 5)", function(object, focus)
@@ -754,11 +727,12 @@ win2:AddToggle("Auto Delivery (продвинутая)", function(state)
     end
 end)
 
-applyScroll(win2)
-
 -- ==================== ОКНО 3: Race ====================
 
 local win3 = library:CreateWindow({ text = "Race" })
+if win3._frame then
+    win3._frame.Size = UDim2.new(0, 420, 0, 450)
+end
 
 win3:AddBox("Auto Race Speed", function(object, focus)
     if focus then
@@ -775,6 +749,7 @@ win3:AddToggle("Auto Race (Standard)", function(state)
     settings.autoRace = state
     _G.racetest = state
     saveSettings()
+    -- Полный код стандартной гонки (взят из car dealer.txt)
     workspace.Gravity = 196
     local race = nil
     local distance = math.huge
@@ -976,6 +951,7 @@ win3:AddToggle("Auto Race (Fast - Hitbox)", function(state)
     settings.autoRaceFast = state
     _G.racetest_fast = state
     saveSettings()
+    -- Быстрая гонка (телепорт по чекпоинтам)
     workspace.Gravity = 196
     local race = nil
     local distance = math.huge
@@ -1240,14 +1216,53 @@ win3:AddToggle("Auto Race Farming (комбо)", function(state)
     end)
 end)
 
-applyScroll(win3)
+-- ==================== ОКНО 4: Misc (расширенное) ====================
 
--- ==================== ОКНО 4: Automation ====================
+local win4 = library:CreateWindow({ text = "Misc" })
+if win4._frame then
+    win4._frame.Size = UDim2.new(0, 420, 0, 620)
+end
 
-local win4 = library:CreateWindow({ text = "Automation" })
+win4:AddButton("Force Load Map", function()
+    for _, v in pairs(workspace:GetDescendants()) do
+        if v:IsA("Model") then
+            task.spawn(function()
+                game.Players.LocalPlayer:RequestStreamAroundAsync(v.WorldPivot.Position, 1)
+            end)
+            task.wait()
+        end
+    end
+end)
 
-win4:AddLabel("Season Rewards: from level")
-win4:AddBox("From (default 1)", function(object, focus)
+win4:AddLabel("Race Teleports")
+win4:AddDropdown(races(), function(state)
+    if state ~= "None" then
+        for _, v in pairs(workspace.Races:GetChildren()) do
+            if v.Name == state then
+                local chr = game.Players.LocalPlayer.Character
+                if chr and chr:FindFirstChild("Humanoid") then
+                    local target
+                    if v:FindFirstChildOfClass("UnionOperation") then
+                        target = v:FindFirstChildOfClass("UnionOperation").CFrame
+                    else
+                        target = v:GetPivot()
+                    end
+                    if chr.Humanoid.SeatPart == nil then
+                        chr.HumanoidRootPart.CFrame = target
+                    else
+                        local car = chr.Humanoid.SeatPart.Parent.Parent
+                        car:PivotTo(target)
+                    end
+                end
+                break
+            end
+        end
+    end
+end)
+
+-- ---- Остальные функции (из объединённого скрипта) ----
+win4:AddLabel("----- Season & Free Rewards -----")
+win4:AddBox("Season from level", function(object, focus)
     if focus then
         local num = tonumber(object.Text)
         if num then
@@ -1256,8 +1271,7 @@ win4:AddBox("From (default 1)", function(object, focus)
         end
     end
 end)
-win4:AddLabel("to level")
-win4:AddBox("To (default 50)", function(object, focus)
+win4:AddBox("to level", function(object, focus)
     if focus then
         local num = tonumber(object.Text)
         if num then
@@ -1384,8 +1398,8 @@ win4:AddToggle("Auto Collect All Free Rewards", function(state)
     end)
 end)
 
-win4:AddLabel("Spin Settings (SpinEvent)")
-win4:AddBox("Spin count per cycle (default 1)", function(object, focus)
+win4:AddLabel("----- Spin Settings -----")
+win4:AddBox("Spin count per cycle", function(object, focus)
     if focus then
         local num = tonumber(object.Text)
         if num then
@@ -1394,7 +1408,7 @@ win4:AddBox("Spin count per cycle (default 1)", function(object, focus)
         end
     end
 end)
-win4:AddBox("Spin delay (seconds, default 0.3)", function(object, focus)
+win4:AddBox("Spin delay (seconds)", function(object, focus)
     if focus then
         local num = tonumber(object.Text)
         if num then
@@ -1462,8 +1476,7 @@ win4:AddToggle("Auto Spin Hyper (с количеством)", function(state)
     end)
 end)
 
-win4:AddLabel("--- Auto Purchase Spins (Free Dup) ---")
-win4:AddLabel("Тип спина (например: Standard, Hyper, SpinPack)")
+win4:AddLabel("----- Auto Purchase Spins (Free Dup) -----")
 win4:AddBox("Spin type", function(object, focus)
     if focus then
         local val = object.Text
@@ -1473,8 +1486,7 @@ win4:AddBox("Spin type", function(object, focus)
         end
     end
 end)
-win4:AddLabel("Количество за вызов (число)")
-win4:AddBox("Amount", function(object, focus)
+win4:AddBox("Amount per call", function(object, focus)
     if focus then
         local num = tonumber(object.Text)
         if num then
@@ -1483,7 +1495,6 @@ win4:AddBox("Amount", function(object, focus)
         end
     end
 end)
-
 win4:AddToggle("Auto Purchase Spins (Free Dup)", function(state)
     settings.autoPurchaseSpins = state
     getfenv().autoPurchaseSpins = state
@@ -1497,7 +1508,7 @@ win4:AddToggle("Auto Purchase Spins (Free Dup)", function(state)
                 if spinner then
                     spinner:FireServer(settings.purchaseSpinsType, settings.purchaseSpinsAmount)
                 else
-                    warn("OnPurchaseSpins не найден, возможно, путь отличается.")
+                    warn("OnPurchaseSpins не найден")
                 end
             end)
             task.wait(1.5)
@@ -1505,8 +1516,8 @@ win4:AddToggle("Auto Purchase Spins (Free Dup)", function(state)
     end)
 end)
 
-win4:AddLabel("Kits: количество за цикл")
-win4:AddBox("Enter count (default 1)", function(object, focus)
+win4:AddLabel("----- Kits -----")
+win4:AddBox("Kits count per cycle", function(object, focus)
     if focus then
         local num = tonumber(object.Text)
         if num then
@@ -1515,7 +1526,6 @@ win4:AddBox("Enter count (default 1)", function(object, focus)
         end
     end
 end)
-
 win4:AddToggle("Auto Open Kits (с количеством)", function(state)
     settings.autoOpenKits = state
     getfenv().openKits = state
@@ -1561,8 +1571,8 @@ win4:AddToggle("Auto Open All Customization Kits (отдельно)", function(s
     end)
 end)
 
-win4:AddLabel("Auto Chop: Car Name")
-win4:AddBox("Enter car name", function(object, focus)
+win4:AddLabel("----- Auto Chop / Infusion -----")
+win4:AddBox("Chop Car Name", function(object, focus)
     if focus then
         local val = object.Text
         if val and val ~= "" then
@@ -1571,8 +1581,7 @@ win4:AddBox("Enter car name", function(object, focus)
         end
     end
 end)
-win4:AddLabel("Auto Chop: Car GUID")
-win4:AddBox("Enter car GUID", function(object, focus)
+win4:AddBox("Chop Car GUID", function(object, focus)
     if focus then
         local val = object.Text
         if val and val ~= "" then
@@ -1581,7 +1590,6 @@ win4:AddBox("Enter car GUID", function(object, focus)
         end
     end
 end)
-
 win4:AddToggle("Auto Chop Vehicle", function(state)
     settings.autoChop = state
     getfenv().autoChop = state
@@ -1601,8 +1609,7 @@ win4:AddToggle("Auto Chop Vehicle", function(state)
     end)
 end)
 
-win4:AddLabel("Auto Infusion: Car Name")
-win4:AddBox("Enter car name", function(object, focus)
+win4:AddBox("Infusion Car Name", function(object, focus)
     if focus then
         local val = object.Text
         if val and val ~= "" then
@@ -1611,8 +1618,7 @@ win4:AddBox("Enter car name", function(object, focus)
         end
     end
 end)
-win4:AddLabel("Auto Infusion: Car GUID")
-win4:AddBox("Enter car GUID", function(object, focus)
+win4:AddBox("Infusion Car GUID", function(object, focus)
     if focus then
         local val = object.Text
         if val and val ~= "" then
@@ -1621,7 +1627,6 @@ win4:AddBox("Enter car GUID", function(object, focus)
         end
     end
 end)
-
 win4:AddToggle("Auto Infusion Vehicle", function(state)
     settings.autoInfusion = state
     getfenv().autoInfusion = state
@@ -1670,50 +1675,8 @@ win4:AddToggle("Auto Claim Daily Streak", function(state)
     end)
 end)
 
-applyScroll(win4)
-
--- ==================== ОКНО 5: Misc ====================
-
-local win5 = library:CreateWindow({ text = "Misc" })
-
-win5:AddButton("Force Load Map", function()
-    for _, v in pairs(workspace:GetDescendants()) do
-        if v:IsA("Model") then
-            task.spawn(function()
-                game.Players.LocalPlayer:RequestStreamAroundAsync(v.WorldPivot.Position, 1)
-            end)
-            task.wait()
-        end
-    end
-end)
-
-win5:AddLabel("Race Teleports")
-win5:AddDropdown(races(), function(state)
-    if state ~= "None" then
-        for _, v in pairs(workspace.Races:GetChildren()) do
-            if v.Name == state then
-                local chr = game.Players.LocalPlayer.Character
-                if chr and chr:FindFirstChild("Humanoid") then
-                    local target
-                    if v:FindFirstChildOfClass("UnionOperation") then
-                        target = v:FindFirstChildOfClass("UnionOperation").CFrame
-                    else
-                        target = v:GetPivot()
-                    end
-                    if chr.Humanoid.SeatPart == nil then
-                        chr.HumanoidRootPart.CFrame = target
-                    else
-                        local car = chr.Humanoid.SeatPart.Parent.Parent
-                        car:PivotTo(target)
-                    end
-                end
-                break
-            end
-        end
-    end
-end)
-
-win5:AddToggle("Auto Loop All (Season + Kits + Spins)", function(state)
+win4:AddLabel("----- Misc Automation -----")
+win4:AddToggle("Auto Loop All (Season + Kits + Spins)", function(state)
     getfenv().autoLoopAll = state
     saveSettings()
     task.spawn(function()
@@ -1775,7 +1738,7 @@ win5:AddToggle("Auto Loop All (Season + Kits + Spins)", function(state)
     end)
 end)
 
-win5:AddToggle("Auto Claim Tokens", function(state)
+win4:AddToggle("Auto Claim Tokens", function(state)
     getfenv().claimTokens = state
     saveSettings()
     task.spawn(function()
@@ -1791,7 +1754,7 @@ win5:AddToggle("Auto Claim Tokens", function(state)
     end)
 end)
 
-win5:AddToggle("Auto Use Deluxe Upgrade Kit", function(state)
+win4:AddToggle("Auto Use Deluxe Upgrade Kit", function(state)
     getfenv().autoUpgradeKit = state
     saveSettings()
     task.spawn(function()
@@ -1807,7 +1770,7 @@ win5:AddToggle("Auto Use Deluxe Upgrade Kit", function(state)
     end)
 end)
 
-win5:AddToggle("Auto Smart Sell (самый дорогой заказ)", function(state)
+win4:AddToggle("Auto Smart Sell (самый дорогой заказ)", function(state)
     settings.autoSmartSell = state
     getfenv().smartSell = state
     saveSettings()
@@ -1869,8 +1832,8 @@ win5:AddToggle("Auto Smart Sell (самый дорогой заказ)", functio
     end)
 end)
 
-win5:AddLabel("Auto Consume Item")
-win5:AddBox("Enter item name", function(object, focus)
+win4:AddLabel("----- Consume / Purchase -----")
+win4:AddBox("Auto Consume Item", function(object, focus)
     if focus then
         local val = object.Text
         if val and val ~= "" then
@@ -1879,8 +1842,7 @@ win5:AddBox("Enter item name", function(object, focus)
         end
     end
 end)
-
-win5:AddToggle("Auto Consume Items", function(state)
+win4:AddToggle("Auto Consume Items", function(state)
     settings.autoConsume = state
     getfenv().autoConsume = state
     saveSettings()
@@ -1897,8 +1859,7 @@ win5:AddToggle("Auto Consume Items", function(state)
     end)
 end)
 
-win5:AddLabel("Auto Purchase Item")
-win5:AddBox("Enter item name", function(object, focus)
+win4:AddBox("Auto Purchase Item", function(object, focus)
     if focus then
         local val = object.Text
         if val and val ~= "" then
@@ -1907,8 +1868,7 @@ win5:AddBox("Enter item name", function(object, focus)
         end
     end
 end)
-
-win5:AddToggle("Auto Purchase (магазин)", function(state)
+win4:AddToggle("Auto Purchase (магазин)", function(state)
     settings.autoPurchase = state
     getfenv().autoPurchase = state
     saveSettings()
@@ -1922,7 +1882,7 @@ win5:AddToggle("Auto Purchase (магазин)", function(state)
     end)
 end)
 
-win5:AddToggle("Block Analytics Events", function(state)
+win4:AddToggle("Block Analytics Events", function(state)
     getfenv().blockAnalytics = state
     task.spawn(function()
         while getfenv().blockAnalytics do
@@ -1931,7 +1891,7 @@ win5:AddToggle("Block Analytics Events", function(state)
     end)
 end)
 
-win5:AddButton("Show All Remotes", function()
+win4:AddButton("Show All Remotes", function()
     print("=== All Remotes in ReplicatedStorage ===")
     local function printRemotes(parent, indent)
         indent = indent or ""
@@ -1948,17 +1908,15 @@ win5:AddButton("Show All Remotes", function()
     print("=== End of Remotes ===")
 end)
 
-win5:AddButton("Save Settings", function()
+win4:AddButton("Save Settings", function()
     saveSettings()
     print("Settings saved!")
 end)
 
-win5:AddButton("Load Settings", function()
+win4:AddButton("Load Settings", function()
     loadSettings()
     print("Settings loaded!")
 end)
-
-applyScroll(win5)
 
 -- ==================== УСТАНОВКА НАЧАЛЬНЫХ ЗНАЧЕНИЙ ====================
 
@@ -1969,4 +1927,4 @@ getfenv().smaller = settings.deliveryMinMoney
 getfenv().bigger = settings.deliveryMaxMoney
 getfenv().grav = workspace.Gravity
 
-print("✅ Скрипт успешно загружен (версия 10.0, всё в одном)!")
+print("✅ Скрипт успешно загружен (расширенная версия car dealer.txt)!")
