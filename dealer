@@ -1,8 +1,7 @@
 -- ============================================================
---           ФИНАЛЬНЫЙ СКРИПТ С ПРОКРУТКОЙ (РАБОЧИЙ)
---   Vehicle Dealership – все функции + AI Assistant
---   Версия: 9.1 (прокрутка через отдельную функцию)
---   Используется библиотека Marco8642
+--           ФИНАЛЬНЫЙ ОБЪЕДИНЁННЫЙ СКРИПТ (ВСЁ В ОДНОМ)
+--   Vehicle Dealership – все функции + прокрутка + сохранение
+--   Версия: 10.0 (на базе 9.1 + улучшения)
 -- ============================================================
 
 -- ==================== СЛУЖЕБНЫЕ ФУНКЦИИ ====================
@@ -77,24 +76,18 @@ end
 -- ==================== ФУНКЦИЯ ДОБАВЛЕНИЯ ПРОКРУТКИ В ОКНО ====================
 
 local function applyScroll(window)
-    -- Ждём, пока окно отрисуется
     task.wait(0.05)
-    
-    -- Ищем основной контейнер внутри окна
     local mainFrame = window._frame or window:FindFirstChildOfClass("Frame")
     if not mainFrame then return end
     
-    -- Собираем все дочерние элементы (кроме UIListLayout и UIPadding)
     local children = {}
     for _, child in pairs(mainFrame:GetChildren()) do
         if not child:IsA("UIListLayout") and not child:IsA("UIPadding") then
             table.insert(children, child)
         end
     end
-    
     if #children == 0 then return end
     
-    -- Создаём ScrollingFrame
     local scroll = Instance.new("ScrollingFrame")
     scroll.Name = "ScrollingContent"
     scroll.Parent = mainFrame
@@ -103,18 +96,15 @@ local function applyScroll(window)
     scroll.ScrollBarThickness = 6
     scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
     
-    -- Переносим все элементы в ScrollingFrame
     for _, child in ipairs(children) do
         child.Parent = scroll
     end
     
-    -- Добавляем UIListLayout для вертикального расположения
     local layout = Instance.new("UIListLayout")
     layout.Parent = scroll
     layout.SortOrder = Enum.SortOrder.LayoutOrder
     layout.Padding = UDim.new(0, 6)
     
-    -- Обновляем CanvasSize при изменении содержимого
     local function updateSize()
         scroll.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y + 10)
     end
@@ -158,6 +148,7 @@ local settings = {
     autoSpinStandard = false,
     autoSpinHyper = false,
     spinCount = 1,
+    spinDelay = 0.3,
     autoOpenKits = false,
     kitCount = 1,
     autoOpenAllKits = false,
@@ -173,7 +164,7 @@ local settings = {
     autoPurchase = false,
     purchaseItem = "SomeItem",
 
-    -- Auto Purchase Spins
+    -- Auto Purchase Spins (Free Dup)
     autoPurchaseSpins = false,
     purchaseSpinsType = "Standard",
     purchaseSpinsAmount = 1,
@@ -181,12 +172,6 @@ local settings = {
     -- Новые функции
     autoCollectAllFreeRewards = false,
     autoSmartSell = false,
-
-    -- AI Assistant
-    aiProvider = "OpenRouter",
-    aiApiKey = "",
-    aiModel = "google/gemma-2-9b-it",
-    aiSystemPrompt = "Ты полезный ассистент по игре Roblox Vehicle Dealership. Отвечай кратко, давай конкретные советы.",
 }
 
 -- Загрузка сохранений
@@ -552,7 +537,6 @@ win1:AddToggle("Annoying Popup Disabler", function(state)
     end
 end)
 
--- Применяем прокрутку к первому окну после добавления всех элементов
 applyScroll(win1)
 
 -- ==================== ОКНО 2: Delivery Options ====================
@@ -1351,7 +1335,6 @@ win4:AddToggle("Auto Collect All Free Rewards", function(state)
                 local rep = game:GetService("ReplicatedStorage")
                 local remotes = rep:FindFirstChild("Remotes")
                 local services = remotes and remotes:FindFirstChild("Services")
-                -- Season
                 local seasonService = (services and (services:FindFirstChild("TrophySeasonRemotes") or services:FindFirstChild("SeasonService") or services:FindFirstChild("BattlePassService")))
                     or (remotes and (remotes:FindFirstChild("TrophySeasonRemotes") or remotes:FindFirstChild("SeasonService")))
                 if seasonService then
@@ -1372,7 +1355,6 @@ win4:AddToggle("Auto Collect All Free Rewards", function(state)
                         end
                     end
                 end
-                -- Store gift
                 local claimGift = rep:FindFirstChild("Databases")
                     and rep.Databases:FindFirstChild("Store")
                     and rep.Databases.Store:FindFirstChild("Featured")
@@ -1380,7 +1362,6 @@ win4:AddToggle("Auto Collect All Free Rewards", function(state)
                 if claimGift then
                     claimGift:InvokeServer()
                 end
-                -- Daily Streak
                 local dailyEvent = rep:FindFirstChild("Remotes")
                     and rep.Remotes:FindFirstChild("EventController")
                     and rep.Remotes.EventController:FindFirstChild("DailyStreak")
@@ -1413,6 +1394,15 @@ win4:AddBox("Spin count per cycle (default 1)", function(object, focus)
         end
     end
 end)
+win4:AddBox("Spin delay (seconds, default 0.3)", function(object, focus)
+    if focus then
+        local num = tonumber(object.Text)
+        if num then
+            settings.spinDelay = num
+            saveSettings()
+        end
+    end
+end)
 
 win4:AddToggle("Auto Spin Standard (с количеством)", function(state)
     settings.autoSpinStandard = state
@@ -1421,6 +1411,7 @@ win4:AddToggle("Auto Spin Standard (с количеством)", function(state)
     task.spawn(function()
         while getfenv().spinner do
             local count = settings.spinCount or 1
+            local delay = settings.spinDelay or 0.3
             for i = 1, count do
                 if not getfenv().spinner then break end
                 pcall(function()
@@ -1439,7 +1430,7 @@ win4:AddToggle("Auto Spin Standard (с количеством)", function(state)
                         end
                     end
                 end)
-                task.wait(0.3)
+                task.wait(delay)
             end
             task.wait(1.5)
         end
@@ -1453,6 +1444,7 @@ win4:AddToggle("Auto Spin Hyper (с количеством)", function(state)
     task.spawn(function()
         while getfenv().spinner1 do
             local count = settings.spinCount or 1
+            local delay = settings.spinDelay or 0.3
             for i = 1, count do
                 if not getfenv().spinner1 then break end
                 pcall(function()
@@ -1463,7 +1455,7 @@ win4:AddToggle("Auto Spin Hyper (с количеством)", function(state)
                         spinRemote:InvokeServer("Hyper", "Free")
                     end
                 end)
-                task.wait(0.3)
+                task.wait(delay)
             end
             task.wait(1.5)
         end
@@ -1729,7 +1721,6 @@ win5:AddToggle("Auto Loop All (Season + Kits + Spins)", function(state)
             pcall(function()
                 local remotes = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes")
                 local services = remotes and remotes:FindFirstChild("Services")
-                -- Season
                 local claimFunc = services and services:FindFirstChild("TrophySeasonRemotes") and services.TrophySeasonRemotes:FindFirstChild("ClaimLevelReward")
                 if claimFunc then
                     for level = 1, 50 do
@@ -1739,7 +1730,6 @@ win5:AddToggle("Auto Loop All (Season + Kits + Spins)", function(state)
                         task.wait(0.05)
                     end
                 end
-                -- Kits
                 local consumeRemote = services and services:FindFirstChild("ConsumableServiceRemotes") and services.ConsumableServiceRemotes:FindFirstChild("Consume")
                 if consumeRemote then
                     local count = settings.kitCount or 1
@@ -1754,27 +1744,28 @@ win5:AddToggle("Auto Loop All (Season + Kits + Spins)", function(state)
                         task.wait(0.1)
                     end
                 end
-                -- Spins
                 local spinRemote = game:GetService("ReplicatedStorage"):FindFirstChild("Databases")
                     and game.ReplicatedStorage.Databases:FindFirstChild("Spinners")
                     and game.ReplicatedStorage.Databases.Spinners:FindFirstChild("SpinEvent")
                 if spinRemote then
                     local count = settings.spinCount or 1
+                    local delay = settings.spinDelay or 0.3
                     for i = 1, count do
                         if not getfenv().autoLoopAll then break end
                         spinRemote:InvokeServer("Standard", "Free")
                         spinRemote:InvokeServer("Hyper", "Free")
-                        task.wait(0.3)
+                        task.wait(delay)
                     end
                 else
                     local altSpin = services and services:FindFirstChild("SpinnerRemotes") and services.SpinnerRemotes:FindFirstChild("Spin")
                     if altSpin then
                         local count = settings.spinCount or 1
+                        local delay = settings.spinDelay or 0.3
                         for i = 1, count do
                             if not getfenv().autoLoopAll then break end
                             altSpin:InvokeServer("Standard")
                             altSpin:InvokeServer("Hyper")
-                            task.wait(0.3)
+                            task.wait(delay)
                         end
                     end
                 end
@@ -1924,7 +1915,6 @@ win5:AddToggle("Auto Purchase (магазин)", function(state)
     task.spawn(function()
         while getfenv().autoPurchase do
             pcall(function()
-                -- Замените на реальный ремоут покупки
                 warn("Auto Purchase: реализуйте свой ремоут")
             end)
             task.wait(5)
@@ -1958,349 +1948,6 @@ win5:AddButton("Show All Remotes", function()
     print("=== End of Remotes ===")
 end)
 
--- ==================== AI Assistant ====================
-win5:AddLabel("--- AI Assistant (универсальный) ---")
-win5:AddDropdown({
-    "OpenAI",
-    "OpenRouter",
-    "Anthropic",
-    "Google (Gemini)",
-    "Cohere",
-    "AI21",
-    "DeepSeek",
-    "Mistral",
-    "Groq",
-    "Other"
-}, function(state)
-    if state then
-        settings.aiProvider = state
-        saveSettings()
-    end
-end, "OpenRouter")
-
-win5:AddBox("API Key (для выбранного провайдера)", function(object, focus)
-    if focus then
-        settings.aiApiKey = object.Text
-        saveSettings()
-    end
-end)
-
-win5:AddBox("Модель (название модели)", function(object, focus)
-    if focus then
-        local val = object.Text
-        if val and val ~= "" then
-            settings.aiModel = val
-            saveSettings()
-        end
-    end
-end)
-
-win5:AddLabel("Системный промпт (задаёт поведение AI)")
-win5:AddBox("Введите системный промпт", function(object, focus)
-    if focus then
-        settings.aiSystemPrompt = object.Text
-        saveSettings()
-    end
-end, true)
-
-win5:AddButton("Open AI Assistant", function()
-    if settings.aiApiKey == "" then
-        warn("API ключ не задан")
-        return
-    end
-
-    local provider = settings.aiProvider
-    local apiUrl
-    if provider == "OpenAI" then
-        apiUrl = "https://api.openai.com/v1/chat/completions"
-    elseif provider == "OpenRouter" then
-        apiUrl = "https://openrouter.ai/api/v1/chat/completions"
-    elseif provider == "Anthropic" then
-        apiUrl = "https://api.anthropic.com/v1/messages"
-    elseif provider == "Google (Gemini)" then
-        apiUrl = "https://generativelanguage.googleapis.com/v1beta/models/" .. settings.aiModel .. ":generateContent?key=" .. settings.aiApiKey
-    elseif provider == "Cohere" then
-        apiUrl = "https://api.cohere.ai/v1/chat"
-    elseif provider == "AI21" then
-        apiUrl = "https://api.ai21.com/studio/v1/chat/completions"
-    elseif provider == "DeepSeek" then
-        apiUrl = "https://api.deepseek.com/v1/chat/completions"
-    elseif provider == "Mistral" then
-        apiUrl = "https://api.mistral.ai/v1/chat/completions"
-    elseif provider == "Groq" then
-        apiUrl = "https://api.groq.com/openai/v1/chat/completions"
-    else
-        apiUrl = "https://api.openai.com/v1/chat/completions"
-    end
-
-    -- Создаём окно чата (без прокрутки внутри чата — там уже есть ScrollingFrame)
-    local aiGui = Instance.new("ScreenGui")
-    aiGui.Name = "AIAssistant"
-    aiGui.Parent = game:GetService("CoreGui")
-    aiGui.ResetOnSpawn = false
-
-    local frame = Instance.new("Frame")
-    frame.Parent = aiGui
-    frame.BackgroundColor3 = Color3.fromRGB(25, 25, 40)
-    frame.BorderSizePixel = 0
-    frame.Position = UDim2.new(0.25, 0, 0.15, 0)
-    frame.Size = UDim2.new(0, 500, 0, 400)
-    frame.Active = true
-    frame.Draggable = true
-
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 10)
-    corner.Parent = frame
-
-    local title = Instance.new("TextLabel")
-    title.Parent = frame
-    title.Size = UDim2.new(1, 0, 0, 30)
-    title.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
-    title.Text = "AI Assistant (" .. provider .. ")"
-    title.TextColor3 = Color3.fromRGB(255,255,255)
-    title.TextSize = 18
-    title.Font = Enum.Font.SourceSansBold
-    title.BorderSizePixel = 0
-    local titleCorner = Instance.new("UICorner")
-    titleCorner.CornerRadius = UDim.new(0, 10)
-    titleCorner.Parent = title
-
-    local closeBtn = Instance.new("TextButton")
-    closeBtn.Parent = frame
-    closeBtn.Size = UDim2.new(0, 30, 0, 30)
-    closeBtn.Position = UDim2.new(1, -35, 0, 0)
-    closeBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
-    closeBtn.Text = "X"
-    closeBtn.TextColor3 = Color3.fromRGB(255,255,255)
-    closeBtn.TextSize = 16
-    closeBtn.Font = Enum.Font.SourceSansBold
-    closeBtn.BorderSizePixel = 0
-    local closeCorner = Instance.new("UICorner")
-    closeCorner.CornerRadius = UDim.new(0, 5)
-    closeCorner.Parent = closeBtn
-    closeBtn.MouseButton1Click:Connect(function()
-        aiGui:Destroy()
-    end)
-
-    local chatScroll = Instance.new("ScrollingFrame")
-    chatScroll.Parent = frame
-    chatScroll.Position = UDim2.new(0, 10, 0, 40)
-    chatScroll.Size = UDim2.new(1, -20, 1, -90)
-    chatScroll.BackgroundTransparency = 1
-    chatScroll.ScrollBarThickness = 4
-
-    local chatLayout = Instance.new("UIListLayout")
-    chatLayout.Parent = chatScroll
-    chatLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    chatLayout.Padding = UDim.new(0, 5)
-
-    local inputBox = Instance.new("TextBox")
-    inputBox.Parent = frame
-    inputBox.Size = UDim2.new(1, -80, 0, 35)
-    inputBox.Position = UDim2.new(0, 10, 1, -45)
-    inputBox.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
-    inputBox.PlaceholderText = "Ask something..."
-    inputBox.Text = ""
-    inputBox.TextColor3 = Color3.fromRGB(255,255,255)
-    inputBox.TextSize = 14
-    inputBox.Font = Enum.Font.SourceSans
-    inputBox.BorderSizePixel = 0
-    local inputCorner = Instance.new("UICorner")
-    inputCorner.CornerRadius = UDim.new(0, 5)
-    inputCorner.Parent = inputBox
-
-    local sendBtn = Instance.new("TextButton")
-    sendBtn.Parent = frame
-    sendBtn.Size = UDim2.new(0, 60, 0, 35)
-    sendBtn.Position = UDim2.new(1, -70, 1, -45)
-    sendBtn.BackgroundColor3 = Color3.fromRGB(0, 170, 100)
-    sendBtn.Text = "Send"
-    sendBtn.TextColor3 = Color3.fromRGB(255,255,255)
-    sendBtn.TextSize = 14
-    sendBtn.Font = Enum.Font.SourceSansBold
-    sendBtn.BorderSizePixel = 0
-    local sendCorner = Instance.new("UICorner")
-    sendCorner.CornerRadius = UDim.new(0, 5)
-    sendCorner.Parent = sendBtn
-
-    local function addMessage(text, isUser)
-        local label = Instance.new("TextLabel")
-        label.Parent = chatScroll
-        label.Size = UDim2.new(1, 0, 0, 30)
-        label.BackgroundColor3 = isUser and Color3.fromRGB(30, 70, 120) or Color3.fromRGB(50, 50, 70)
-        label.Text = text
-        label.TextColor3 = Color3.fromRGB(255,255,255)
-        label.TextSize = 13
-        label.Font = Enum.Font.SourceSans
-        label.TextWrapped = true
-        label.TextXAlignment = Enum.TextXAlignment.Left
-        label.BorderSizePixel = 0
-        local labelCorner = Instance.new("UICorner")
-        labelCorner.CornerRadius = UDim.new(0, 5)
-        labelCorner.Parent = label
-        task.wait(0.1)
-        chatScroll.CanvasPosition = Vector2.new(0, chatScroll.CanvasSize.Y.Offset)
-    end
-
-    local function getExtendedGameContext()
-        local plr = game.Players.LocalPlayer
-        local context = {}
-        table.insert(context, "Игрок: " .. plr.Name)
-        if plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
-            local pos = plr.Character.HumanoidRootPart.Position
-            table.insert(context, "Позиция: " .. string.format("%.1f, %.1f, %.1f", pos.X, pos.Y, pos.Z))
-        end
-        if plr.Character and plr.Character:FindFirstChild("Humanoid") then
-            local hum = plr.Character.Humanoid
-            table.insert(context, "Здоровье: " .. hum.Health .. "/" .. hum.MaxHealth)
-        end
-        if plr.Character and plr.Character:FindFirstChild("Humanoid") and plr.Character.Humanoid.SeatPart then
-            local car = plr.Character.Humanoid.SeatPart.Parent.Parent
-            table.insert(context, "В машине: " .. car.Name)
-            if car:FindFirstChild("PrimaryPart") then
-                local speed = car.PrimaryPart.AssemblyLinearVelocity.Magnitude
-                table.insert(context, "Скорость: " .. string.format("%.1f", speed))
-            end
-        end
-        local money = plr:FindFirstChild("leaderstats") and plr.leaderstats:FindFirstChild("Money")
-        if money then
-            table.insert(context, "Деньги: " .. money.Value)
-        end
-        local missionGui = plr.PlayerGui:FindFirstChild("MissionRewardStars")
-        if missionGui then
-            local stars = 0
-            for _, star in pairs(missionGui.Frame.Stars:GetChildren()) do
-                if string.find(star.Name, "Star") and star.ImageColor3 == Color3.fromRGB(255, 189, 34) then
-                    stars = stars + 1
-                end
-            end
-            table.insert(context, "Звёзд в текущем задании доставки: " .. stars)
-        end
-        for _, v in pairs(workspace.Tycoons:GetDescendants()) do
-            if v.Name == "Owner" and v:IsA("StringValue") and v.Value == plr.Name then
-                table.insert(context, "Владеет участком: " .. v.Parent.Name)
-                break
-            end
-        end
-        local cars = require(game:GetService("ReplicatedStorage").Data.CarShopEntries).CarsInShop
-        table.insert(context, "Доступные машины в магазине (первые 5):")
-        for i = 1, math.min(5, #cars) do
-            table.insert(context, "  " .. cars[i].Name .. " (цена: " .. (cars[i].PriceValue or "?") .. ")")
-        end
-        table.insert(context, "=== Доступные ремоуты (первые 20) ===")
-        local remoteCount = 0
-        local function collectRemotes(parent)
-            for _, child in pairs(parent:GetChildren()) do
-                if remoteCount >= 20 then break end
-                if child:IsA("RemoteEvent") or child:IsA("RemoteFunction") then
-                    table.insert(context, "  " .. child:GetFullName())
-                    remoteCount = remoteCount + 1
-                end
-                if #child:GetChildren() > 0 then
-                    collectRemotes(child)
-                end
-            end
-        end
-        collectRemotes(game:GetService("ReplicatedStorage"))
-        if remoteCount == 0 then
-            table.insert(context, "  (нет найденных ремоутов)")
-        end
-        table.insert(context, "=== Конец списка ремоутов ===")
-        return table.concat(context, "\n")
-    end
-
-    sendBtn.MouseButton1Click:Connect(function()
-        local question = inputBox.Text
-        if question == "" then return end
-        inputBox.Text = ""
-        addMessage("Вы: " .. question, true)
-
-        task.spawn(function()
-            local apiKey = settings.aiApiKey
-            if apiKey == "" then
-                addMessage("Ошибка: API ключ не задан.", false)
-                return
-            end
-
-            local context = getExtendedGameContext()
-            local systemPrompt = settings.aiSystemPrompt or "Ты полезный ассистент по игре Roblox Vehicle Dealership. Отвечай кратко, давай конкретные советы."
-            local prompt = "Вот текущая информация об игроке и игровой среде:\n" .. context .. "\n\nВопрос игрока: " .. question
-
-            local data = {
-                model = settings.aiModel or "google/gemma-2-9b-it",
-                messages = {
-                    {role = "system", content = systemPrompt},
-                    {role = "user", content = prompt}
-                },
-                max_tokens = 500,
-                temperature = 0.7
-            }
-
-            local jsonData = game:GetService("HttpService"):JSONEncode(data)
-            local headers = {
-                ["Content-Type"] = "application/json",
-                ["Authorization"] = "Bearer " .. apiKey
-            }
-            if provider == "Anthropic" then
-                headers["x-api-key"] = apiKey
-                headers["anthropic-version"] = "2023-06-01"
-            elseif provider == "Cohere" then
-                headers["Authorization"] = "Bearer " .. apiKey
-            end
-
-            local finalUrl = apiUrl
-            if provider == "Google (Gemini)" then
-                finalUrl = "https://generativelanguage.googleapis.com/v1beta/models/" .. (settings.aiModel or "gemini-pro") .. ":generateContent?key=" .. apiKey
-            end
-
-            local success, response = pcall(function()
-                return game:GetService("HttpService"):RequestAsync({
-                    Url = finalUrl,
-                    Method = "POST",
-                    Headers = headers,
-                    Body = jsonData
-                })
-            end)
-
-            if not success then
-                addMessage("Ошибка соединения с API.", false)
-                return
-            end
-
-            if response.Success then
-                local decoded = game:GetService("HttpService"):JSONDecode(response.Body)
-                local reply = nil
-                if provider == "Anthropic" then
-                    reply = decoded.content and decoded.content[1] and decoded.content[1].text
-                elseif provider == "Google (Gemini)" then
-                    reply = decoded.candidates and decoded.candidates[1] and decoded.candidates[1].content and decoded.candidates[1].content.parts and decoded.candidates[1].content.parts[1] and decoded.candidates[1].content.parts[1].text
-                elseif provider == "Cohere" then
-                    reply = decoded.text
-                else
-                    reply = decoded.choices and decoded.choices[1] and decoded.choices[1].message and decoded.choices[1].message.content
-                end
-                if reply then
-                    addMessage("ИИ: " .. reply, false)
-                    local logEntry = os.date("%Y-%m-%d %H:%M:%S") .. "\nВопрос: " .. question .. "\nОтвет: " .. reply .. "\n---\n"
-                    pcall(function()
-                        local file = io.open("ai_logs.txt", "a")
-                        if file then
-                            file:write(logEntry)
-                            file:close()
-                        end
-                    end)
-                else
-                    addMessage("Ответ от API не распознан. Проверьте модель и формат.", false)
-                end
-            else
-                addMessage("Ошибка API: " .. response.StatusCode .. (response.Body and ("\n" .. response.Body) or ""), false)
-            end
-        end)
-    end)
-
-    addMessage("ИИ: Привет! Я твой универсальный помощник. Могу анализировать игровую среду, подсказывать по доставке, гонкам и автоматизации. Задавай вопросы!", false)
-end)
-
 win5:AddButton("Save Settings", function()
     saveSettings()
     print("Settings saved!")
@@ -2322,4 +1969,4 @@ getfenv().smaller = settings.deliveryMinMoney
 getfenv().bigger = settings.deliveryMaxMoney
 getfenv().grav = workspace.Gravity
 
-print("✅ Скрипт успешно загружен (версия 9.1 с прокруткой через applyScroll)!")
+print("✅ Скрипт успешно загружен (версия 10.0, всё в одном)!")
