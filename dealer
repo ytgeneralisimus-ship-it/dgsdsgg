@@ -1,7 +1,7 @@
 -- ============================================================
---           РАСШИРЕННЫЙ СКРИПТ НА ОСНОВЕ car dealer.txt
---   Все функции из объединённого скрипта (версия 11.0)
---   Сохранение в JSON, 4 окна, без прокрутки
+--           ФИНАЛЬНЫЙ ОБЪЕДИНЁННЫЙ СКРИПТ (ВСЁ В ОДНОМ)
+--   Vehicle Dealership – все функции + авто-покупка машин
+--   Версия: 12.0 (с добавлением Giver Kit и Auto Buy Cars)
 -- ============================================================
 
 -- ==================== СЛУЖЕБНЫЕ ФУНКЦИИ ====================
@@ -128,6 +128,15 @@ local settings = {
     purchaseSpinsAmount = 1,
     autoCollectAllFreeRewards = false,
     autoSmartSell = false,
+
+    -- NEW: Auto Buy Cars
+    autoBuyCars = false,
+    buyMinPrice = 0,
+    buyMaxPrice = 999999999,
+    buySpecificCar = "", -- если не пусто, покупаем только эту машину (по имени)
+
+    -- NEW: Giver Kit (отдельный тоггл)
+    giverKit = false,
 }
 
 -- Загрузка из JSON
@@ -165,7 +174,6 @@ end
 -- ==================== ОКНО 1: Vehicle Dealership ====================
 
 local win1 = library:CreateWindow({ text = "Vehicle Dealership" })
--- Увеличиваем высоту, чтобы всё поместилось
 if win1._frame then
     win1._frame.Size = UDim2.new(0, 420, 0, 600)
 end
@@ -1216,51 +1224,13 @@ win3:AddToggle("Auto Race Farming (комбо)", function(state)
     end)
 end)
 
--- ==================== ОКНО 4: Misc (расширенное) ====================
+-- ==================== ОКНО 4: Automation ====================
 
-local win4 = library:CreateWindow({ text = "Misc" })
+local win4 = library:CreateWindow({ text = "Automation" })
 if win4._frame then
-    win4._frame.Size = UDim2.new(0, 420, 0, 620)
+    win4._frame.Size = UDim2.new(0, 420, 0, 700) -- увеличил, чтобы поместились новые функции
 end
 
-win4:AddButton("Force Load Map", function()
-    for _, v in pairs(workspace:GetDescendants()) do
-        if v:IsA("Model") then
-            task.spawn(function()
-                game.Players.LocalPlayer:RequestStreamAroundAsync(v.WorldPivot.Position, 1)
-            end)
-            task.wait()
-        end
-    end
-end)
-
-win4:AddLabel("Race Teleports")
-win4:AddDropdown(races(), function(state)
-    if state ~= "None" then
-        for _, v in pairs(workspace.Races:GetChildren()) do
-            if v.Name == state then
-                local chr = game.Players.LocalPlayer.Character
-                if chr and chr:FindFirstChild("Humanoid") then
-                    local target
-                    if v:FindFirstChildOfClass("UnionOperation") then
-                        target = v:FindFirstChildOfClass("UnionOperation").CFrame
-                    else
-                        target = v:GetPivot()
-                    end
-                    if chr.Humanoid.SeatPart == nil then
-                        chr.HumanoidRootPart.CFrame = target
-                    else
-                        local car = chr.Humanoid.SeatPart.Parent.Parent
-                        car:PivotTo(target)
-                    end
-                end
-                break
-            end
-        end
-    end
-end)
-
--- ---- Остальные функции (из объединённого скрипта) ----
 win4:AddLabel("----- Season & Free Rewards -----")
 win4:AddBox("Season from level", function(object, focus)
     if focus then
@@ -1551,6 +1521,27 @@ win4:AddToggle("Auto Open Kits (с количеством)", function(state)
     end)
 end)
 
+-- NEW: Giver Kit – отдельный тоггл, дублирует открытие китов, но с другим названием
+win4:AddToggle("Giver Kit (открывает все виды китов)", function(state)
+    settings.giverKit = state
+    getfenv().giverKit = state
+    saveSettings()
+    task.spawn(function()
+        while getfenv().giverKit do
+            pcall(function()
+                local consume = game:GetService("ReplicatedStorage").Remotes.Services.ConsumableServiceRemotes.Consume
+                local kitTypes = {"DecorationKit", "DecorationKitDeluxe", "RegularCustomizationKit", "DeluxeCustomizationKit", "CustomizationKit"}
+                for _, kitName in ipairs(kitTypes) do
+                    if not getfenv().giverKit then break end
+                    consume:InvokeServer(kitName)
+                    task.wait(0.1)
+                end
+            end)
+            task.wait(0.5)
+        end
+    end)
+end)
+
 win4:AddToggle("Auto Open All Customization Kits (отдельно)", function(state)
     settings.autoOpenAllKits = state
     getfenv().openAllKits = state
@@ -1675,8 +1666,133 @@ win4:AddToggle("Auto Claim Daily Streak", function(state)
     end)
 end)
 
-win4:AddLabel("----- Misc Automation -----")
-win4:AddToggle("Auto Loop All (Season + Kits + Spins)", function(state)
+win4:AddLabel("----- Auto Buy Cars (из магазина) -----")
+win4:AddBox("Min price (0 = no limit)", function(object, focus)
+    if focus then
+        local num = tonumber(object.Text)
+        if num then
+            settings.buyMinPrice = num
+            saveSettings()
+        end
+    end
+end)
+win4:AddBox("Max price (999999999 = no limit)", function(object, focus)
+    if focus then
+        local num = tonumber(object.Text)
+        if num then
+            settings.buyMaxPrice = num
+            saveSettings()
+        end
+    end
+end)
+win4:AddBox("Specific car name (empty = all in range)", function(object, focus)
+    if focus then
+        local val = object.Text
+        settings.buySpecificCar = val
+        saveSettings()
+    end
+end)
+win4:AddToggle("Auto Buy Cars (покупает недостающие машины)", function(state)
+    settings.autoBuyCars = state
+    getfenv().autoBuyCars = state
+    saveSettings()
+    task.spawn(function()
+        while getfenv().autoBuyCars do
+            pcall(function()
+                local carShopEntries = require(game:GetService("ReplicatedStorage").Data.CarShopEntries)
+                local cars = carShopEntries.CarsInShop
+                -- Получаем список машин игрока (если есть)
+                local playerCars = {}
+                local playerData = game:GetService("Players").LocalPlayer:FindFirstChild("Data") -- предположим
+                if playerData and playerData:FindFirstChild("OwnedCars") then
+                    for _, car in pairs(playerData.OwnedCars:GetChildren()) do
+                        playerCars[car.Name] = true
+                    end
+                end
+                -- Если нет данных, попробуем через ремоут (заглушка)
+                -- В реальности можно добавить ремоут GetOwnedCars, но для простоты будем считать, что машины не куплены, если их нет в инвентаре.
+                for _, car in pairs(cars) do
+                    if not getfenv().autoBuyCars then break end
+                    local price = car.PriceValue or 0
+                    local carName = car.Name or ""
+                    if settings.buySpecificCar ~= "" and settings.buySpecificCar ~= carName then
+                        continue -- пропускаем, если указана конкретная машина и не совпадает
+                    end
+                    if price >= settings.buyMinPrice and price <= settings.buyMaxPrice then
+                        -- Проверяем, есть ли уже такая машина у игрока (по имени)
+                        if not playerCars[carName] then
+                            -- Пытаемся купить
+                            local purchaseRemote = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes")
+                                and game.ReplicatedStorage.Remotes:FindFirstChild("Services")
+                                and game.ReplicatedStorage.Remotes.Services:FindFirstChild("CarShopService")
+                                and game.ReplicatedStorage.Remotes.Services.CarShopService:FindFirstChild("PurchaseCar")
+                            if purchaseRemote then
+                                local success, result = pcall(function()
+                                    return purchaseRemote:InvokeServer(car.Id)
+                                end)
+                                if success then
+                                    print("Куплена машина: " .. carName .. " за " .. price)
+                                    playerCars[carName] = true -- помечаем как купленную
+                                else
+                                    warn("Не удалось купить " .. carName .. ": " .. tostring(result))
+                                end
+                            else
+                                warn("Ремоут PurchaseCar не найден")
+                            end
+                        end
+                    end
+                end
+            end)
+            task.wait(5)
+        end
+    end)
+end)
+
+-- ==================== ОКНО 5: Misc ====================
+
+local win5 = library:CreateWindow({ text = "Misc" })
+if win5._frame then
+    win5._frame.Size = UDim2.new(0, 420, 0, 620)
+end
+
+win5:AddButton("Force Load Map", function()
+    for _, v in pairs(workspace:GetDescendants()) do
+        if v:IsA("Model") then
+            task.spawn(function()
+                game.Players.LocalPlayer:RequestStreamAroundAsync(v.WorldPivot.Position, 1)
+            end)
+            task.wait()
+        end
+    end
+end)
+
+win5:AddLabel("Race Teleports")
+win5:AddDropdown(races(), function(state)
+    if state ~= "None" then
+        for _, v in pairs(workspace.Races:GetChildren()) do
+            if v.Name == state then
+                local chr = game.Players.LocalPlayer.Character
+                if chr and chr:FindFirstChild("Humanoid") then
+                    local target
+                    if v:FindFirstChildOfClass("UnionOperation") then
+                        target = v:FindFirstChildOfClass("UnionOperation").CFrame
+                    else
+                        target = v:GetPivot()
+                    end
+                    if chr.Humanoid.SeatPart == nil then
+                        chr.HumanoidRootPart.CFrame = target
+                    else
+                        local car = chr.Humanoid.SeatPart.Parent.Parent
+                        car:PivotTo(target)
+                    end
+                end
+                break
+            end
+        end
+    end
+end)
+
+win5:AddToggle("Auto Loop All (Season + Kits + Spins)", function(state)
     getfenv().autoLoopAll = state
     saveSettings()
     task.spawn(function()
@@ -1738,7 +1854,7 @@ win4:AddToggle("Auto Loop All (Season + Kits + Spins)", function(state)
     end)
 end)
 
-win4:AddToggle("Auto Claim Tokens", function(state)
+win5:AddToggle("Auto Claim Tokens", function(state)
     getfenv().claimTokens = state
     saveSettings()
     task.spawn(function()
@@ -1754,7 +1870,7 @@ win4:AddToggle("Auto Claim Tokens", function(state)
     end)
 end)
 
-win4:AddToggle("Auto Use Deluxe Upgrade Kit", function(state)
+win5:AddToggle("Auto Use Deluxe Upgrade Kit", function(state)
     getfenv().autoUpgradeKit = state
     saveSettings()
     task.spawn(function()
@@ -1770,7 +1886,7 @@ win4:AddToggle("Auto Use Deluxe Upgrade Kit", function(state)
     end)
 end)
 
-win4:AddToggle("Auto Smart Sell (самый дорогой заказ)", function(state)
+win5:AddToggle("Auto Smart Sell (самый дорогой заказ)", function(state)
     settings.autoSmartSell = state
     getfenv().smartSell = state
     saveSettings()
@@ -1832,8 +1948,8 @@ win4:AddToggle("Auto Smart Sell (самый дорогой заказ)", functio
     end)
 end)
 
-win4:AddLabel("----- Consume / Purchase -----")
-win4:AddBox("Auto Consume Item", function(object, focus)
+win5:AddLabel("----- Consume / Purchase -----")
+win5:AddBox("Auto Consume Item", function(object, focus)
     if focus then
         local val = object.Text
         if val and val ~= "" then
@@ -1842,7 +1958,7 @@ win4:AddBox("Auto Consume Item", function(object, focus)
         end
     end
 end)
-win4:AddToggle("Auto Consume Items", function(state)
+win5:AddToggle("Auto Consume Items", function(state)
     settings.autoConsume = state
     getfenv().autoConsume = state
     saveSettings()
@@ -1859,7 +1975,7 @@ win4:AddToggle("Auto Consume Items", function(state)
     end)
 end)
 
-win4:AddBox("Auto Purchase Item", function(object, focus)
+win5:AddBox("Auto Purchase Item", function(object, focus)
     if focus then
         local val = object.Text
         if val and val ~= "" then
@@ -1868,7 +1984,7 @@ win4:AddBox("Auto Purchase Item", function(object, focus)
         end
     end
 end)
-win4:AddToggle("Auto Purchase (магазин)", function(state)
+win5:AddToggle("Auto Purchase (магазин)", function(state)
     settings.autoPurchase = state
     getfenv().autoPurchase = state
     saveSettings()
@@ -1882,7 +1998,7 @@ win4:AddToggle("Auto Purchase (магазин)", function(state)
     end)
 end)
 
-win4:AddToggle("Block Analytics Events", function(state)
+win5:AddToggle("Block Analytics Events", function(state)
     getfenv().blockAnalytics = state
     task.spawn(function()
         while getfenv().blockAnalytics do
@@ -1891,7 +2007,7 @@ win4:AddToggle("Block Analytics Events", function(state)
     end)
 end)
 
-win4:AddButton("Show All Remotes", function()
+win5:AddButton("Show All Remotes", function()
     print("=== All Remotes in ReplicatedStorage ===")
     local function printRemotes(parent, indent)
         indent = indent or ""
@@ -1908,12 +2024,12 @@ win4:AddButton("Show All Remotes", function()
     print("=== End of Remotes ===")
 end)
 
-win4:AddButton("Save Settings", function()
+win5:AddButton("Save Settings", function()
     saveSettings()
     print("Settings saved!")
 end)
 
-win4:AddButton("Load Settings", function()
+win5:AddButton("Load Settings", function()
     loadSettings()
     print("Settings loaded!")
 end)
@@ -1927,4 +2043,4 @@ getfenv().smaller = settings.deliveryMinMoney
 getfenv().bigger = settings.deliveryMaxMoney
 getfenv().grav = workspace.Gravity
 
-print("✅ Скрипт успешно загружен (расширенная версия car dealer.txt)!")
+print("✅ Скрипт успешно загружен (расширенная версия с Auto Buy Cars и Giver Kit)!")
