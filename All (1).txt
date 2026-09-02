@@ -1,0 +1,247 @@
+--[[
+╔═══════════════════════════════════════════════════════════════╗
+║  [OBFUSCATOR] : Remix 8.0 HyperVM PRO+                        ║
+║  [DEVELOPER]  : Made by FigVam                                ║
+║  [TARGET]     : UNIVERSAL                                     ║
+║  [INTEGRITY]  : Adler-32 (0xD7B2C2FF) | Non-Linear S-Box        ║
+║  [TIMESTAMP]  : 2026-09-02 18:51:41                           ║
+╚═══════════════════════════════════════════════════════════════╝
+--]]
+
+return (function(...)
+local _IuacuemCSC8e = rawget
+local _rawset = rawset
+local _type = type
+local _pcall = pcall
+local _select = select
+local _pairs = pairs
+local _setmetatable = setmetatable
+local _t_insert = table.insert
+local _t_concat = table.concat
+local _t_unpack = table.unpack or unpack
+local _s_char = string.char
+local _s_gmatch = string.gmatch
+local _m_floor = math.floor
+local _m_sin = math.sin
+local _m_max = math.max
+local _bx = (bit32 and bit32.bxor) or (bit and bit.bxor) or function(_a, _b)
+  local _r, _m = 0, 1
+  while _a > 0 or _b > 0 do
+    if (_a % 2) ~= (_b % 2) then _r = _r + _m end
+    _a = _m_floor(_a / 2)
+    _b = _m_floor(_b / 2)
+    _m = _m * 2
+  end
+  return _r
+end
+local _0x6be302d5101 = {
+  {164,155,60,168,54,176,50,196,16,121,142,230,152,157,16,133,134,40,21,67,245,141,184,27,162,51,216,228,36,1,87,135,23,138,44,117,90,141,116,193,7,78,189,33,85,126,32,204,190,167,116,165,84,186,173,103,52,21,46,20,97,166,180,15,26,37,94,250,16,35,165,119,30,129,29,88,62,157,109,133,45,120,243,250,245,74,19,49,76,222,113,241,216,65,87,135,121,40,43,60,209,3,46,204,209,78,90,33,194,11,101,138,190,101,144,141,199,149,140,108,179,89,120,110,73,26,228,254},
+  {178,237,229,248,175,103,153,61,120,124,255,207,231,66,120,242,65,161,184,181,119,242,4,83,147,247,6,119,133,216,74,182,32,233,223,121,132,70,221,189,240,129,206,203,241,144,255,151,17,60,254,74,51,201,171,110,26,11,233,78,4,141,8,116,16,132,212,18,175,103,153,61,108,101,157,109,230,169,166,53,65,161,178,181,65,89,147,75,36,17,88,30,246,46,160,55,32,25,211,170,126,128,41,47,131,21,6,105,241,144,255,151,199,40,95,100,143,73,106,238,53,217,189,59,5,160,240,236},
+  {124,99,110,153,66,106,235,201,95,231,224,150,130,84,38,136,82,174,90,195,22,111,175,228,61,125,22,31,242,146,14,188,181,87,16,181,237,170,59,161,176,48,177,134,14,128,172,149,227,107,73,75,117,144,231,27,189,89,55,12,103,144,236,101,120,163,228,239,102,58,45,149,157,162,8,233,130,172,221,54,22,67,35,222,49,92,50,150,61,138,194,31,242,37,101,48,242,166,24,221,192,224,156,6,27,177,144,86,47,39,139,95,14,178,131,69,154,33,96,164,104,215,201,227,151,158,193,127},
+  {11,57,37,208,229,237,210,112,7,45,4,206,165,148,36,180,82,113,202,23}
+}
+local _chunkPtr_35036fa7 = {"\34\42\5\96\48\29\78\124","\171\148\42\120\5\23\81\92\8\241\41\52\126\121\28\55\80\160\66\42\243\192\186\46\209\141\120\90\224\183\25\91\234\197\168\83\52\110\113\61\52\99\122\139\104","\93\231\39\115\183\130\137\151\50\136\65\104\83\185\10\175\55\168\89\132\102\113\84\77\238\244\105\134\69\222\95\50\235\206\181\83\240\65\169\2\227\34","\91\14\76\180\119\21\130\144\240\20\39\231\185\245\82\177\30\132\182\237\68\165\241\147\0\18\46\12\28\134\188\38\39\204\255\79\1\93\10\217\102\236\222\68\217\245\18\32\64\241\237\223\223\205\49\13\117\118\163\142\60\80\10\187\106\183\51\157\105\96\148\86\102\232\94\95\222\239\59","\137\96\51\107\168\172\59\119\74\204\55\48\209\23\98\126\141\11\10\25\47\90\171\163\189\56\18\254\64\153\42\106\225\33\54\143\8\182\209\150\104\92\188\65\57\32\37\218\42\109\99\134\142\218","\38\23\23\178\64\0\13\75\40\86\134\168\230\124\57\233\140\67\159\152\64\14\135\56\137\218","\139\168\23\156\51\121\127\207\99\85\169\54\161\114\58\179\107\162\183\76\24\31\158\13\187\37","\107\149\65\246\10\56\130\50\157\225\184\199\108\254\235\14\30\223\229\76\41\63\74\198\207\185\26\17\122\27\165\174\80\66\70\168\57\21\109\216\14\235\131\147\176\85\231\219\245\169\160\192\187\247\29\241\255\116\225\237\20\189\220\71\205\183\213\195","\128\66\82\180\57\16\211\168\1\135\120\76\229\242\235\39\25\146\160\131\85\203\244\148\222\55\36\134\177\243\118\27\160\31\193\212\69\112\179\13\78\228\9\105\17\131\235\199\118\153\66\163\75\204\243\6\103\208\40\106\226\236\145\138\27\92\114\31\151\148\36\154\136\39\233\204\45\8\203\101\49\20\63\111\176","\228\42\38\251\234\166\105\150\106\202\167\2\227\238\33\174\162\187\108\251\119\134\125\5\109\227\116\164\9\45\137\62\149\138\209\184\143\110\199\246\77","\200\38\3\23\210\226","\148\49\10\156\43\240\220\161\206\148\229\243\191","\165\163\8\45\132\180\187\23\108\45\102","\38\221\23\52\127\203\229\220\31\195\68\52\57\25\177\42\163\45\130\170\30\76\71\118\230\3","\88\230\19\253\143\96\217\142\123\75\206\69\116\194\17\72\71\106\101\7\6\233","\42\56\3\47\82\123"}
+local _0xa851f637103 = {}
+local _збдвлоед = 3618816767
+local _N_OFF, _N_KEY, _N_XOR, _N_MULT = 758, 202, 127, 9
+local _RK_A, _RK_B = 208, 155
+local _vmSlot_c6c27fe9, _вжамгвгм = 211, 188
+local _OCMiWcWEyiiq = {}
+do
+  local _rawSBox = "\29\80\65\194\4\203\48\249\183\56\91\229\92\38\145\207\12\109\73\253\96\163\166\79\51\185\33\27\103\162\167\67\114\71\61\21\116\75\124\137\2\23\42\213\24\53\204\70\18\186\152\244\195\89\237\222\125\171\86\184\35\78\13\127\227\158\34\46\156\1\193\215\221\31\82\118\88\223\232\251\30\122\40\26\238\218\150\39\100\50\211\120\43\74\83\16\138\151\52\57\160\157\248\187\219\220\119\20\233\68\146\197\239\76\44\159\15\60\144\62\72\250\189\59\247\132\69\164\188\11\77\19\225\95\148\226\84\168\128\235\54\37\245\179\154\22\170\102\49\181\14\97\121\17\241\6\254\177\196\64\243\58\0\206\126\110\252\94\228\255\208\3\175\210\212\214\113\231\205\182\112\200\178\149\81\191\55\107\63\135\201\139\99\123\234\180\85\131\90\246\105\169\224\104\172\161\66\230\129\141\198\47\174\192\165\155\140\101\240\130\45\5\153\216\209\36\98\32\87\176\106\8\147\93\190\242\199\111\25\28\10\136\108\9\41\134\236\7\202\142\143\115\133\217\117\173"
+  local _idx = 0
+  for _n in _s_gmatch(_rawSBox, "\\(%d+)") do
+    _OCMiWcWEyiiq[_idx] = tonumber(_n)
+    _idx = _idx + 1
+  end
+end
+do
+  local _h = false
+  if not _pcall(function() return 1 end) then _h = true end
+  if getrawmetatable and hookmetamethod and _type(hookmetamethod) == "function" then
+    local _mt = getrawmetatable(game)
+    if _mt and isreadonly and not isreadonly(_mt) then _h = true end
+  end
+  if _h then
+    while true do end
+  end
+end
+local _0x8BC9914F = (getgenv and getgenv()) or (getfenv and getfenv()) or _G
+if setfenv and _type(setfenv) == "function" then
+  _pcall(function() setfenv(1, _setmetatable({}, { __index = _0x8BC9914F, __newindex = _0x8BC9914F })) end)
+end
+local _0x4F5A9DED = (os and os.clock) or tick
+local _IIiillllllllIl_39 = _0x4F5A9DED()
+local _a, _b, _mod = 1, 0, 65521
+for _cIdx = 1, #_0x6be302d5101 do
+  local _ch = _0x6be302d5101[_cIdx]
+  for _i = 1, #_ch do
+    _a = (_a + (_ch[_i] % 256)) % _mod
+    _b = (_b + _a) % _mod
+  end
+end
+if ((_b * 65536) + _a) ~= _збдвлоед then
+  while true do end
+end
+local _знкнббиб = _setmetatable({}, {
+  __index = function(_, _svcName)
+    if game and _type(game.GetService) == "function" then
+      local _ok, _svc = _pcall(function() return game:GetService(_svcName) end)
+      if _ok and _svc then return _svc end
+    end
+    return nil
+  end
+})
+local function __IIll1lIi1__31(_idx)
+  local _r = _chunkPtr_35036fa7[_idx + 1]
+  if not _r then return "" end
+  local _b = {}
+  local _step, _sA, _sB, _len, _cIdx = 0, 0, 0, 0, 0
+  for _n in _s_gmatch(_r, "\\(%d+)") do
+    local _v = tonumber(_n)
+    if _step == 0 then
+      _sA = _v; _step = 1
+    elseif _step == 1 then
+      _sB = _v; _step = 2
+    elseif _step == 2 then
+      _len = _v; _step = 3
+    else
+      local _subX = _bx(_v, (_sB + _cIdx * 7) % 256)
+      local _unSBox = _OCMiWcWEyiiq[_subX] or _subX
+      local _origChar = _bx(_unSBox, _sA) % 256
+      _t_insert(_b, _s_char(_origChar))
+      _cIdx = _cIdx + 1
+    end
+  end
+  return _t_concat(_b)
+end
+local function _каеоаилд(_idx)
+  local _raw = _0xa851f637103[_idx + 1]
+  if not _raw then return 0 end
+  local _dec = _bx(_raw, _N_XOR)
+  return ((_dec - _N_OFF - _N_KEY - (_idx * _N_MULT)) / 1000)
+end
+local function _64Yy6mMCCSC0(_chunkIdx, _i)
+  local _ch = _0x6be302d5101[_chunkIdx]
+  if not _ch then return 0 end
+  local _v = _ch[_i]
+  if not _v then return 0 end
+  local _roll = (_vmSlot_c6c27fe9 + ((_chunkIdx - 1) * 53) + ((_i - 1) * _вжамгвгм)) % 256
+  local _subB = _bx(_v, _RK_B)
+  local _unSBox = _OCMiWcWEyiiq[_subB] or _subB
+  local _subRoll = (_unSBox - _roll) % 256
+  if _subRoll < 0 then _subRoll = _subRoll + 256 end
+  return _bx(_subRoll, _RK_A) % 256
+end
+local function _bootVM()
+  local _0x212FDD03 = {}
+  for _chunkIdx = 1, #_0x6be302d5101 do
+    local _0x212fdcfb107 = 1
+    local _len = #_0x6be302d5101[_chunkIdx]
+    while _0x212fdcfb107 <= _len do
+      local _now = _0x4F5A9DED()
+      if (_now - _IIiillllllllIl_39) > 3.0 then
+        for _k = 1, 64 do _0x212FDD03[_k] = 0xDEADC0DE end
+        _0x212fdcfb107 = _len + 9999
+        break
+      end
+      _IIiillllllllIl_39 = _now
+      local _op = _64Yy6mMCCSC0(_chunkIdx, _0x212fdcfb107)
+      local _a = _64Yy6mMCCSC0(_chunkIdx, _0x212fdcfb107 + 1)
+      local _b = _64Yy6mMCCSC0(_chunkIdx, _0x212fdcfb107 + 2)
+      local _c = _64Yy6mMCCSC0(_chunkIdx, _0x212fdcfb107 + 3)
+      _0x212fdcfb107 = _0x212fdcfb107 + 4
+      if _op == 167 then
+        break
+      elseif _op == 207 then
+        local _nm = __IIll1lIi1__31(_b)
+        if _nm == "game" then _0x212FDD03[_a] = game
+        elseif _nm == "workspace" then _0x212FDD03[_a] = workspace
+        elseif _nm == "task" then _0x212FDD03[_a] = task
+        elseif _nm == "pcall" then _0x212FDD03[_a] = _pcall
+        elseif _nm == "print" then _0x212FDD03[_a] = print
+        elseif _nm == "warn" then _0x212FDD03[_a] = warn
+        elseif _nm == "CFrame" then _0x212FDD03[_a] = CFrame
+        elseif _nm == "Vector3" then _0x212FDD03[_a] = Vector3
+        elseif _знкнббиб[_nm] ~= nil then
+          _0x212FDD03[_a] = _знкнббиб[_nm]
+        else
+          _0x212FDD03[_a] = _0x8BC9914F[_nm]
+        end
+      elseif _op == 79 then
+        local _nm = __IIll1lIi1__31(_b)
+        _0x8BC9914F[_nm] = _0x212FDD03[_a]
+      elseif _op == 190 then
+        local _tbl = _0x212FDD03[_b]
+        local _key = _0x212FDD03[_c] or __IIll1lIi1__31(_c)
+        if _tbl ~= nil then _0x212FDD03[_a] = _tbl[_key] end
+      elseif _op == 214 then
+        local _tbl = _0x212FDD03[_a]
+        local _key = _0x212FDD03[_b] or __IIll1lIi1__31(_b)
+        if _tbl ~= nil then _tbl[_key] = _0x212FDD03[_c] end
+      elseif _op == 248 then
+        _0x212FDD03[_a] = __IIll1lIi1__31(_b)
+      elseif _op == 111 then
+        _0x212FDD03[_a] = _каеоаилд(_b)
+      elseif _op == 108 then
+        _0x212FDD03[_a] = (_b == 1)
+      elseif _op == 241 then
+        _0x212FDD03[_a] = nil
+      elseif _op == 195 then
+        local _obj = _0x212FDD03[_b]
+        local _method = __IIll1lIi1__31(_c)
+        _0x212FDD03[_a + 1] = _obj
+        if _obj ~= nil then _0x212FDD03[_a] = _obj[_method] end
+      elseif _op == 27 then
+        local _fn = _0x212FDD03[_a]
+        if _type(_fn) == "function" then
+          local _args = {}
+          for _i = 1, _b do
+            _t_insert(_args, _0x212FDD03[_a + _i])
+          end
+          local _rets = { _pcall(_fn, _t_unpack(_args)) }
+          if _rets[1] == true then
+            table.remove(_rets, 1)
+            for _i = 1, _m_max(1, _c) do
+              _0x212FDD03[_a + _i - 1] = _rets[_i]
+            end
+          end
+        end
+      elseif _op == 104 then
+        _0x212FDD03[_a] = (_0x212FDD03[_b] or 0) + (_0x212FDD03[_c] or 0)
+      elseif _op == 225 then
+        _0x212FDD03[_a] = (_0x212FDD03[_b] or 0) - (_0x212FDD03[_c] or 0)
+      elseif _op == 145 then
+        _0x212FDD03[_a] = (_0x212FDD03[_b] or 0) * (_0x212FDD03[_c] or 0)
+      elseif _op == 157 then
+        local _d = _0x212FDD03[_c] or 1
+        _0x212FDD03[_a] = _d ~= 0 and ((_0x212FDD03[_b] or 0) / _d) or 0
+      elseif _op == 44 then
+        _0x212FDD03[_a] = tostring(_0x212FDD03[_b] or "") .. tostring(_0x212FDD03[_c] or "")
+      elseif _op == 129 then
+        _0x212FDD03[_a] = {}
+      elseif _op == 223 then
+        _0x212FDD03[_a] = (_m_sin(_a) * _b) % 256
+      elseif _op == 124 then
+        if _a > 9999 then _0x212fdcfb107 = _len + 1 end
+      elseif _op == 51 then
+        local _dummy = (_a * 37 + 19) % 256
+      elseif _op == 232 then
+        local _junkTbl = { _a, _b, _c }
+      end
+    end
+  end
+  for _i = 1, 96 do _0x212FDD03[_i] = 0xDEADC0DE end
+  for _cIdx = 1, #_0x6be302d5101 do
+    for _j = 1, #_0x6be302d5101[_cIdx] do
+      _0x6be302d5101[_cIdx][_j] = 0xBAADF00D
+    end
+  end
+  _0x6be302d5101 = nil
+  _chunkPtr_35036fa7 = nil
+  _0xa851f637103 = nil
+  _OCMiWcWEyiiq = nil
+  if collectgarbage then collectgarbage("collect") end
+end
+return _bootVM()
+end)(...)
